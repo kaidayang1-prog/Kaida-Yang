@@ -1,319 +1,277 @@
-# 拼车购物 Carpool Shopping — MVP 设计稿（待确认）
+# 拼车购物 Carpool Shopping — 设计稿 v0.2（待确认）
 
-> 状态：草案 v0.1，确认后才开始写代码。
-> 技术栈：Next.js 15（App Router）+ TypeScript + Tailwind + Supabase（Postgres / Auth / Storage）+ Google Maps（Places、Directions）。
-
----
-
-## 0. 几个基础决定
-
-| 项 | 决定 |
-|---|---|
-| 金额 | 全部用 **整数分（cents）** 存储，类型 `integer`，避免浮点误差。 |
-| 距离 | `numeric(7,2)` 公里。 |
-| 时区 | 存 `timestamptz`，界面按 `America/Toronto` 显示。 |
-| 权限 | 全表开 RLS；写操作走 Next.js Server Actions + Postgres 函数（`security definer`），关键规则在数据库里再校验一次。 |
-| 手机验证码 | 用 Supabase 本地 `auth.sms.test_otp`：种子手机号固定验证码 `123456`，不接真实短信。 |
-| 身份认证 / 背景调查 | 占位流程：上传材料（可随便传张图）→ `pending` → 管理员后台手动通过/拒绝。 |
-| 地图 | 有 `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` / `GOOGLE_MAPS_SERVER_KEY` 时用真实 Places + Directions；**没有 key 时自动退回模拟**（直线距离 × 1.3 + 预置 GTA 地址联想），保证种子流程不依赖 key。 |
-| 定时任务 | Postgres 函数 `run_scheduler()`：截止未成团自动取消、生成每周重复班次。本地用 `pg_cron` 每分钟跑一次，同时提供 `/api/cron` 和开发页上的“手动触发”按钮方便测试。 |
-| 多语言 | 中/英字典 + cookie 记住语言，不把语言放进 URL。 |
-| 设计 | 手机优先（最大宽度 480px 居中），底部 Tab 栏，强调色只用一种：**teal-600 `#0D9488`**，其余为灰阶。 |
+> 状态：按 2026-11-16 的新需求重写，取代 v0.1。确认后才开始写应用代码。
+> 数据库：`supabase/migrations/` 里 4 个 SQL 文件（45 张表、31 个函数、116 条权限策略）。
+> 权限测试：`supabase/tests/rls.test.sql`，41 项，已在 PostgreSQL 16 上全部通过。
 
 ---
 
-## 1. 数据库表设计
+## 0. 和 v0.1 相比的变化
 
-### 1.1 用户与社区
-
-**profiles**（1:1 对应 `auth.users`）
-| 列 | 类型 | 说明 |
+| 方面 | v0.1 | v0.2 |
 |---|---|---|
-| id | uuid PK → auth.users | |
-| phone | text unique | E.164，例如 +14165550101 |
-| display_name | text | |
-| avatar_path | text null | Storage 路径 |
-| locale | text `zh` / `en` | 默认 `zh` |
-| is_driver | bool | 乘客默认都有；开通车主后为 true |
-| driver_tier | enum `none` / `neighbor` / `full` | |
-| home_address, home_lat, home_lng | | 邻居级车主需填地址或学校邮箱 |
-| school_email | text null | |
-| school_email_verified_at | timestamptz null | 模拟：点链接即验证 |
-| status | enum `active` / `suspended` | 管理员可暂停 |
-| is_admin | bool | |
-| created_at | timestamptz | |
-
-**communities** — 楼 / 小区 / 学校
-| 列 | 说明 |
-|---|---|
-| id, name_zh, name_en | |
-| kind | enum `building` / `complex` / `school` |
-| address, lat, lng | 学校可为空 |
-| email_domain | 学校用，如 `utoronto.ca` |
-
-**community_members**：`(profile_id, community_id)` PK，`verified_via` enum `address` / `school_email` / `admin`，`created_at`。
-→ 邻居级车主的班次只对和他有**共同社区**的人可见。
-
-**driver_verifications**：id, profile_id, tier_requested (`neighbor`/`full`), status (`pending`/`approved`/`rejected`), id_document_path（模拟）, background_check (`mock_pending`/`mock_clear`), reviewed_by, reviewed_at, note。
-
-### 1.2 车辆
-
-**vehicles**
-| 列 | 约束 |
-|---|---|
-| id, driver_id | 一个车主 MVP 期一辆默认车，表结构允许多辆 |
-| make_model, color, plate | |
-| seats | `check (seats between 2 and 7)`（含司机的总座位） |
-| trunk_size | enum `small` / `medium` / `large` |
-| fuel_l_per_100km | numeric(4,1) `check (between 3 and 25)` |
-| pets_on_board, smoking | bool |
-| photos_updated_at | timestamptz，上传新照片时触发器更新 → 卡片“照片更新于 X 天前” |
-| is_active | bool |
-
-**vehicle_photos**：id, vehicle_id, kind (`seat`/`trunk`), storage_path, created_at。
-规则：发班次前校验该车 seat ≥ 1 且 trunk ≥ 1。
-
-### 1.3 目的地、班次
-
-**destinations**：id, brand (`costco`/`tnt`/`ikea`/`other`), name, address, lat, lng。种子：GTA 各门店（如 Costco North York、T&T Promenade、IKEA North York 等）。
-
-**trip_series**（每周重复模板）
-| 列 | 说明 |
-|---|---|
-| id, driver_id, vehicle_id, destination_id | |
-| weekday | 0–6 |
-| window_start, window_end | `time`，如 10:00–12:00 |
-| seats_offered | ≤ vehicle.seats − 1 |
-| deadline_hours_before | 截止时间 = 开始前 N 小时（默认 12） |
-| min_riders | 默认 2 |
-| visibility | `public` / `community` |
-| start_date, end_date null, is_active | |
-
-**trip_series_skips**：`(series_id, skip_date)` PK — 跳过某一期。
-
-**trips**（每一期具体班次）
-| 列 | 说明 |
-|---|---|
-| id, series_id null, driver_id, vehicle_id, destination_id | |
-| trip_date, window_start, window_end | |
-| seats_offered | |
-| signup_deadline | timestamptz |
-| min_riders | 默认 2（说明：按“已接受乘客数”计，不含车主——见待确认问题 Q2） |
-| visibility | `public` / `community`；邻居级车主强制 `community` |
-| gas_price_cents_per_l | integer `check (between 50 and 350)` |
-| status | `open` → `confirmed`（截止时成团）/ `cancelled` → `in_progress` → `completed` |
-| cancel_reason | `not_enough_riders` / `driver_cancelled` / `admin` |
-| route_locked_at | 行程结束时锁定 |
-| share_token | 随机字符串，分享链接 `/s/{token}` |
-
-RLS 可见性：`visibility='public'` 且车主未被暂停、未被整洁度暂停；或 viewer 与车主有共同社区。
-
-### 1.4 报名与路线
-
-**bookings**
-| 列 | 说明 |
-|---|---|
-| id, trip_id, passenger_id | unique(trip_id, passenger_id) |
-| status | `pending` / `accepted` / `rejected` / `withdrawn` / `boarded` / `no_show` |
-| pickup_address, pickup_lat, pickup_lng | 地址联想 |
-| dropoff_address, dropoff_lat, dropoff_lng | 默认与上车点相同 |
-| pin | char(4)，接受时生成，只有本人可读 |
-| boarded_at | 车主输入正确 PIN 后写入 |
-
-接受报名用函数 `accept_booking(booking_id)`：`select … for update` 锁 trip，已接受数 ≥ seats_offered 时报错——座位满了不能再接受。
-
-**route_stops**
-| 列 | 说明 |
-|---|---|
-| id, trip_id, seq | unique(trip_id, seq) |
-| kind | `origin`（车主家）/ `pickup` / `destination` / `dropoff` / `return`（回车主家） |
-| booking_id null | pickup/dropoff 对应哪个乘客 |
-| label, lat, lng | |
-
-**route_legs**
-| 列 | 说明 |
-|---|---|
-| id, trip_id, seq | 第 seq 段 = stop[seq] → stop[seq+1] |
-| distance_km | Directions API 算出（或模拟） |
-| is_manual | 车主手动改过公里数 → 界面标“手动” |
-| source | `google` / `mock` / `manual` |
-
-接受乘客或车主调整顺序后：重建 stops → 重算未手动的 legs。
-每段车上有谁不单独存，由 stops 顺序**推导**（车主 + 已上车点、未下车点的乘客），交给纯函数计算。
-
-### 1.5 关注、通知、群聊
-
-**follows**：`(follower_id, driver_id)` PK。车主发新班次（或系列生成新一期）时给关注者写通知（社区可见的班次只通知能看见的人）。
-
-**notifications**：id, user_id, type（`trip_new` / `booking_accepted` / `booking_rejected` / `trip_cancelled_min_riders` / `errand_claimed` / `bill_ready` / `payment_marked` / `payment_confirmed` / `dispute_update` / `photo_refresh_needed` …）, payload jsonb, read_at。站内通知 + 模拟短信（写进 `sms_outbox` 表，开发页可查看）。
-
-**trip_messages**：id, trip_id, sender_id, body, phrase_key null（快捷短语，如“我到楼下了”“堵车晚 5 分钟”“请在 B 门”），created_at。用 Supabase Realtime 推送。
-
-### 1.6 代买
-
-**errand_requests**
-| 列 | 说明 |
-|---|---|
-| id, trip_id, requester_id | requester 不能是该行程已上车的人 |
-| handoff_location | 交接地点 |
-| budget_cap_cents | 整单预算上限 |
-| status | `open` / `claimed` / `purchased` / `handed_off` / `cancelled` |
-| claimed_by | 车上的人（车主或已接受乘客） |
-| receipt_total_cents | 按小票录入 |
-| receipt_photo_path | 可选 |
-
-**errand_items**：id, request_id, name, quantity, note, is_checked（边买边勾选）。
-超出预算 → 录入时前端和函数都提示（允许保存，但标红并通知发单人）。只报销小票金额，没有跑腿费字段。
-
-### 1.7 账单与结算
-
-**bills**：id, trip_id unique, total_fuel_cents, generated_at（行程结束、锁定路线时生成）。
-
-**bill_lines**（每条 = 谁付给谁多少钱）
-| 列 | 说明 |
-|---|---|
-| id, bill_id | |
-| payer_id, payee_id | |
-| kind | `fuel` / `errand` / `dispute` |
-| ref_id | errand_request_id / dispute_id |
-| amount_cents | |
-| status | `unpaid` → `marked_paid`（付款方点“我已付款”）→ `confirmed`（收款方点“确认收款”） |
-| marked_paid_at, confirmed_at | |
-
-**bill_fuel_shares**：bill_id, person_id, share_cents, breakdown jsonb（逐段明细快照，锁定后不再变）。车主自己的份额只展示、不生成 bill_line。
-平台不经手资金，只记录状态，付款提示里显示收款人的 Interac 邮箱/手机号。
-
-### 1.8 评分
-
-**ratings**：id, trip_id, rater_id, ratee_id, stars 1–5, tags text[]，unique(trip_id, rater_id, ratee_id)。双向：乘客评车主、车主评乘客。
-
-**vehicle_cleanliness_ratings**：id, trip_id, rater_id, vehicle_id, score 1–5, tags enum[]（`seats_clean` / `no_odor` / `trunk_usable` / `no_pet_hair` / `not_as_pictured`），unique(trip_id, rater_id)。
-
-**视图 `user_rating_summary`**：最近 100 次平均分；次数 < 3 时返回 null（界面显示“新用户”）。
-**视图 `vehicle_cleanliness_summary`**：最近 20 次平均；次数 < 3 不显示。
-**规则**（插入评分后触发器执行）：
-- 次数 ≥ 5 且平均 < 3.5 → 通知车主更新照片；
-- 次数 ≥ 5 且平均 < 3.0 → `vehicles.public_suspended = true`，其公开班次不再出现在浏览里；车主上传新照片并由管理员恢复后解除。
-
-### 1.9 帮助与申诉、管理
-
-**disputes**
-| 列 | 说明 |
-|---|---|
-| id, trip_id, reporter_id, against_id null | |
-| type | `soiled_vehicle` / `vehicle_damage` / `not_as_described` / `lost_item` / `fare_error` / `safety` / `misconduct` |
-| description | |
-| repair_estimate_cents | `vehicle_damage` 必填 |
-| status | `open` / `reviewing` / `resolved` / `rejected` |
-| ruling_amount_cents, ruling_payer_id, ruling_payee_id, ruling_note, resolved_by, resolved_at | 裁决金额 → 生成 `dispute` 类型的 bill_line |
-
-**dispute_attachments**：id, dispute_id, storage_path, kind (`photo`/`estimate`)。
-校验（函数 `submit_dispute`）：`soiled_vehicle` 至少 1 张照片；`vehicle_damage` 照片 + 估价。
-
-**admin_actions**（审计日志）：id, admin_id, action（`approve_verification` / `reject_verification` / `suspend_user` / `restore_user` / `resolve_dispute` / `restore_vehicle`）, target_id, note, created_at。
-
-### 1.10 Storage 桶
-`vehicle-photos`、`receipts`、`dispute-evidence`、`verification-docs`（私有，管理员可读）、`avatars`。
+| 接人方式 | 上门接 | 车主设 1–3 个集合点并标经过时间；可选官方集合点；乘客可提议新集合点 |
+| 身份 | 乘客 / 车主分开 | 一个 APP 两种身份，注册时选主要身份，随时切换 |
+| 形态 | 手机网页 | PWA（加到主屏幕、推送通知），架构按 Capacitor 打包设计 |
+| 定价 | 车主填油价，可手改公里数 | 油价由平台统一设，公里数只来自地图，车主不能改 |
+| 新增 | — | 信用分与缺席、拼单分装、小区主页和闲置帖子、徽章、优惠券和积分、举报 |
+| 这次不做 | — | 代买清单、申诉裁决流程（先用举报代替）、完整级审核流程（只留接口） |
+| 隐私 | — | 社区成员名单不公开；住址只有本人可见；车牌全号只给已确认的乘客；上车 PIN 车主也读不到 |
+| 强调色 | 青绿色 | 暖橙色，更有社区感 |
 
 ---
 
-## 2. 油费分摊纯函数
+## 1. 架构
 
-文件：`src/lib/fare/splitFare.ts`，零依赖，Vitest 测试。
+**一份代码，网站和 APP 共用**
+- 所有页面都是客户端页面，`next build` 可以静态导出（`output: 'export'`）。网站部署到 Vercel；以后 Capacitor 直接把导出的 `out/` 目录打包成 iOS 和安卓 APP。
+- 为了能静态导出：不用 Server Actions，不依赖服务端渲染；详情页用查询参数（如 `/trips/detail?id=…`），不用动态路由段。
+- 读写数据直接用 supabase-js，权限由数据库的 RLS 保证；有业务规则的操作调用数据库函数（RPC）。
 
-```ts
-type Leg = { km: number; riders: string[] };      // riders 含车主
-type Input = { fuelLPer100km: number; gasPricePerL: number; legs: Leg[] };
-type Output = {
-  costPerKm: number;
-  totalCents: number;
-  shares: Record<string, number>;                  // 每人应付（分）
-  legs: { km: number; costExact: number; riders: string[]; perPersonExact: number }[];
-};
-```
+**服务端逻辑放在 Supabase**
+- Postgres 函数（RPC）：发班次、报名、审批、核对上车 PIN、标记缺席、结算油费、发优惠券、管理员操作。
+- 定时任务（pg_cron，每分钟）：报名截止时判断是否成团（不够就自动取消并通知）、生成重复班次的下一期、行程结束后结算。
+- Edge Functions：调用 Google 地图（地址联想、算路线，用服务端 key），发推送（先做 Web Push，打包后加苹果和安卓推送）。
+- 油费结算以数据库函数为准；页面上的实时预估用同一算法的 TypeScript 纯函数。两边用同一组测试数据校验，包括 v0.1 的例子（$1.69 / $1.21 / $0.83，合计 $3.73）。
 
-算法：
-1. 校验油耗 3–25、油价 0.50–3.50、km ≥ 0、每段至少 1 人。
-2. `costPerKm = 油耗/100 × 油价`；每段成本 = km × costPerKm，由该段 riders 平分，累加得到每人精确值（不取整）。
-3. `totalCents = round(Σ段成本 × 100)`。
-4. **最大余数法**：每人先取 floor(精确分)，剩下的分数按小数部分从大到小各补 1 分（并列时按 id 排序保证稳定）。合计必然等于 totalCents。
+**为打包准备**
+- 推送、定位、分享、相机、登录状态存储这些平台差异都放在 `src/lib/platform/`，网页版和 APP 版各一份实现，运行时自动选择。
+- 学校邮箱用 6 位验证码验证，不用邮件里的登录链接，打包后不用处理深链接。
+- 多语言用一个很小的自写方案：`src/i18n/zh.ts` 为准，`en.ts` 少一条文案就编译报错。语言跟着用户设置走，网址里不带语言。推送通知的文案也在 i18n 文件里，前端和推送服务共用。
 
-用你给的数据手算验证（车主 = D，乘客 A 坐第 2–5 段，乘客 B 坐第 3–4 段）：
-- 每公里 = 0.085 × 1.69 = $0.14365；总油费精确值 $3.7349 → **373 分**
-- D 精确 169.75 分，A 120.91 分，B 82.84 分 → floor 合计 371，差 2 分，补给小数最大的 A(.91)、B(.84)
-- 结果 **D $1.69 / A $1.21 / B $0.83，合计 $3.73** ✅
+**数据存放**：Supabase 建议选加拿大区域（Canada Central）。
 
 ---
 
-## 3. 页面结构（App Router）
+## 2. 数据库表（45 张）
 
-底部 Tab：**发现** ｜ **我的行程** ｜ **开车** ｜ **消息** ｜ **我**
+完整定义见 `supabase/migrations/20261116000001_schema.sql`。金额一律用整数“分”，时间按多伦多时区显示。不收集族裔、国籍信息，社区只按住址或学校邮箱划分。
 
-```
-src/app/
-├─ (auth)/login                 手机号输入
-├─ (auth)/login/verify          验证码
-├─ onboarding                   昵称、语言、地址/学校邮箱 → 加入社区
-├─ (tabs)/
-│  ├─ page.tsx                  发现：班次列表，筛选 目的地 / 日期 / 有空位；关注的车主置顶
-│  ├─ trips                     我的行程（乘客 + 车主，按 即将/进行中/已完成）
-│  ├─ drive                     车主中心：我的班次、待处理报名、车辆、认证状态
-│  ├─ inbox                     通知
-│  └─ me                        资料、语言切换、我关注的、我的评分、账单汇总
-├─ trips/[id]                   班次详情：车辆卡（照片更新于 X 天前、整洁度）、车主评分、
-│                               报名（填上车点）、我的费用预估 + 逐段明细
-│  ├─ route                     路线：地图 + 站点列表，车主拖动排序、改公里数（标“手动”）
-│  ├─ board                     车主：逐个乘客输入 4 位 PIN 上车；乘客：看自己的 PIN
-│  ├─ chat                      群聊 + 快捷短语；顶部 SOS（确认弹窗 → tel:911）、分享链接
-│  ├─ errands                   代买清单列表；new 发清单；[errandId] 认领/勾选/录小票
-│  ├─ bill                      账单：油费 + 代买 + 申诉裁决，“我已付款” / “确认收款”
-│  └─ rate                      评分（星 + 标签；乘客额外给整洁度）
-├─ drive/new                    发班次（单次 / 每周重复）
-├─ drive/series/[id]            重复班次：查看期数、跳过某一期、停止
-├─ drive/vehicle                车辆档案 + 座椅/后备箱照片上传
-├─ drive/verify                 车主认证：邻居级（地址/学校邮箱）、完整级（模拟材料上传 → 待审核）
-├─ drivers/[id]                 车主主页：评分、车辆、关注按钮、即将发出的班次
-├─ help                         帮助中心；help/new 提交申诉（按类型要求证据）；help/[id] 进度
-├─ s/[token]                    公开分享页（不登录可看：目的地、时间段、车辆颜色/车型、当前站点，不显示车牌全号与电话）
-├─ admin/                       管理员（is_admin 才能进）
-│  ├─ verifications             车主认证审核
-│  ├─ disputes                  申诉处理 + 裁决金额
-│  └─ users                     搜索用户，暂停/恢复账号、恢复被暂停的车辆
-├─ dev                          仅开发环境：切换种子用户、手动触发调度、查看模拟短信
-└─ api/cron                     调度入口（截止取消、生成重复班次）
-```
-
-`src/lib/`：`fare/`（纯函数）、`maps/`（google + mock 适配器）、`i18n/`（zh.ts、en.ts）、`supabase/`（server/client）、`format/`。
-`supabase/`：`migrations/`、`seed.sql`、`config.toml`（含 test_otp）。
-
----
-
-## 4. 种子数据与完整流程
-
-- 社区：「Yonge & Sheppard 某公寓」「Markham 某小区」「U of T St. George」
-- 用户（验证码都是 123456）：
-  - 车主 Lily（完整级，公开班次，周六 10:00–12:00 Costco 每周重复）
-  - 车主 Wei（邻居级，社区班次，T&T）
-  - 乘客 Amy、Ben、Chen（与 Wei 同小区）、Dana（不同社区，看不到 Wei 的班次）
-  - 管理员 Admin
-- 已有：一个已完成的行程（带账单、评分），一个进行中的报名，一个人数不足即将被取消的班次，一条代买清单，一条待处理申诉，一条待审核的完整级认证。
+| 模块 | 表 | 存什么 | 谁能看 |
+|---|---|---|---|
+| 用户 | `profiles` | 昵称、头像、语言、主要身份 / 当前身份、认证等级、评分汇总 | 所有登录用户（不含任何隐私字段） |
+| | `user_private` | 手机号、住址（含坐标）、学校邮箱 | 本人、管理员 |
+| | `user_credit` | 信用分、60 天缺席次数、限制报名到何时 | 本人、管理员、正在处理他报名的车主 |
+| | `credit_events` | 信用分变动记录 | 本人、管理员 |
+| 社区 | `communities` | 楼 / 小区 / 学校；中心点和半径，或学校邮箱域名 | 登录用户 |
+| | `community_members` | 谁在哪个社区、怎么验证的 | 只看得到自己的那一行 |
+| | `community_requests` | 申请开通新小区（只填楼名或路口） | 本人、管理员 |
+| | `identity_verifications` | 完整级：实名、驾照照片（只留接口） | 本人、管理员 |
+| 车辆 | `vehicles` | 车型、颜色、座位、后备箱、油耗、宠物 / 吸烟、整洁度汇总、车牌前两位 | 车主，以及能看到这辆车班次的人 |
+| | `vehicle_plates` | 车牌全号 | 车主、管理员、近期班次里已被接受的乘客 |
+| | `vehicle_photos` | 座椅、后备箱照片（只拍车内） | 同 `vehicles` |
+| 基础数据 | `destinations` | Costco、T&T 等门店 | 登录用户；管理员维护 |
+| | `meeting_points` | 集合点；官方点要公共、明亮、能临时停车 | 官方点所有人可见；自建点只有用到它的班次能看到 |
+| | `fuel_prices` | GTA 平均油价（管理员设置） | 登录用户 |
+| | `app_settings` | 可调参数：等候分钟数、信用分规则、满员积分等 | 登录用户；管理员可改 |
+| 班次 | `trip_series` | 重复班次模板（如每周六 10:00） | 车主本人 |
+| | `trip_series_meeting_points` | 模板的集合点和相对时间 | 车主本人 |
+| | `trip_series_skips` | 跳过某一期 | 车主本人 |
+| | `trips` | 每一期：目的地、出发时间、座位、最低成团人数、截止时间、状态；发布时冻结油耗和油价 | 社区班次给本社区成员；公开班次给所有登录用户；车主被暂停后隐藏 |
+| | `trip_meeting_points` | 班次的 1–3 个集合点和经过时间；乘客提议的点也放这里，待车主同意 | 生效的点：能看到班次的人；提议中的点：提议人和车主 |
+| 报名 | `bookings` | 选的上车点、回程下车点（默认同一点）、同行人数、状态 | 乘客本人、车主；同车的人能看到已确认的同伴 |
+| | `booking_pins` | 4 位上车 PIN | 只有乘客本人（车主输入后由系统核对） |
+| 路线与油费 | `route_stops` / `route_legs` | 集合点 → 超市 → 集合点 的站点和每段公里数（只来自地图） | 能看到班次的人 |
+| | `fare_settlements` / `fare_shares` | 行程结束后的账单：每段快照、每人应付、已付 / 已收到 | 这趟车的参与者 |
+| 关注与通知 | `follows` | 关注车主，可以关闭提醒 | 本人 |
+| | `notifications` | 站内通知（同时触发推送） | 本人 |
+| | `push_subscriptions` | 网页推送订阅；以后存 APP 的设备 token | 本人 |
+| 社交 | `trip_messages` | 班次群聊（实时） | 车主和已确认的乘客 |
+| | `group_buys` / `group_buy_participants` | 拼单分装：标题、份数、在哪个集合点分、小票金额；谁参加了几份 | 能看到这个班次的人 |
+| | `community_posts` / `post_photos` / `post_comments` | 小区主页的闲置交换、免费送、求购、通知 | 本社区成员 |
+| 评价 | `reviews` | 双向 1–5 星、标签、短评 | 登录用户（公开，建立信任） |
+| | `cleanliness_ratings` | 乘客给车辆整洁度打分和标签 | 评分人、管理员；车主只看汇总 |
+| | `badges` / `user_badges` | 徽章代码（名称在 i18n 文件）和获得记录 | 登录用户 |
+| 优惠券 | `coupons` | 商家、标题、有效期、发放规则、数量 | 登录用户；管理员维护 |
+| | `coupon_codes` | 券码池 | 管理员 |
+| | `coupon_grants` | 发给谁、因为哪趟车、券码、是否已使用 | 本人、管理员 |
+| | `points_ledger` | 积分流水 | 本人、管理员 |
+| 管理 | `reports` | 举报（安全、骚扰、歧视、诈骗、缺席争议等） | 举报人、管理员 |
+| | `admin_actions` | 管理员操作日志 | 管理员 |
 
 ---
 
-## 5. 开发顺序（每完成一块告诉你怎么本地运行和测试）
+## 3. 权限（RLS）
 
-| # | 模块 | 测试方式 |
+完整策略见 `supabase/migrations/20261116000003_rls.sql`（数据表）和 `20261116000004_storage.sql`（文件）。
+
+- **所有表都开 RLS，未登录不能直接读写任何表。** 公开的分享页以后通过一个只返回有限信息的函数读取。
+- **读**：按“谁需要看”放开，见上表最后一列。
+- **写，简单内容**：车辆、帖子、评论、群聊、关注、评价、拼单，由客户端直接写，RLS 检查是不是本人、是不是这个社区或这趟车的人。
+- **写，有业务规则的**：班次、报名、集合点、上车、缺席、信用分、账单、优惠券、积分，客户端没有写权限，只能调用数据库函数。
+- **列级限制**：比如用户能改自己的昵称，但改不了 `is_admin`、信用分、认证等级、评分汇总。
+- **文件**：头像公开；车内照片跟着车辆权限走；帖子照片只给本社区；拼单小票只给能看到拼单的人；驾照照片只有本人和管理员能看。
+
+**测试覆盖（41 项，全部通过）**，例如：
+- Amy 能看到本小区班次和公开班次；Dana 住别的小区，只能看到公开班次。
+- 社区成员名单谁都列不出来，只能看到自己；不能自己随便加入别的社区。
+- 车主看得到报名乘客的信用分，看不到乘客的住址、手机号和上车 PIN。
+- 车牌全号只有已被接受的乘客能看到；其他人只看到前两位。
+- 用户不能把自己改成管理员，不能改自己的信用分，不能直接写班次表。
+- 学校邮箱验证通过后自动加入学校社区、升为邻居级。
+- 车主被暂停后，他的班次对其他人隐藏。
+
+---
+
+## 4. 主要业务规则（默认值，可在后台调整的标 ⚙）
+
+**认证与身份**
+- 手机号级：只验证了手机号，可以浏览。
+- 邻居级：手机号加住址（落在某个小区范围内）或学校邮箱。可以报名，可以发社区班次。
+- 完整级：实名加驾照。先只做提交入口；管理员在后台手动设置后可以发公开班次。
+
+**集合点与准时**
+- 每个班次 1–3 个集合点（含乘客提议并被同意的），每个点标经过时间。回程默认按倒序送回各点。
+- 每个点最多等 5 分钟 ⚙，满 5 分钟后车主才能标记“缺席”。上车用 4 位 PIN 核对。
+
+**成团**
+- 报名截止默认出发前 12 小时 ⚙（车主可设 2–72 小时）。
+- 截止时，已确认的乘客人数（含同行家人，不含车主）不够最低成团人数（默认 2），就自动取消并通知所有报名的人。截止后不再接受新报名。
+
+**信用分 ⚙**
+- 满分 100。缺席 −20；出发前 2 小时内自己取消 −10；车主在出发前 12 小时内取消已成团的班次 −15；每完成一趟 +2。
+- 60 天内缺席 2 次，停止报名 7 天；3 次，停止 30 天。
+
+**油费 AA**
+- 每公里成本 = 油耗 / 100 × 油价。油耗由车主填写（3–25 L/100km）并公开显示，油价由平台统一设置，两者都在发布班次时冻结。
+- 公开路线只算 集合点 → 超市 → 集合点，每段公里数来自地图。车主家到第一个集合点、最后一个集合点回家这两段车上只有车主，不影响别人，不公开也不分摊。
+- 每段油费由这段车上的所有人平分，车主算一个人，同行家人每人算一个。用最大余数法取整到分，所有人加起来正好等于总油费。
+- 公式和逐段明细对能看到班次的人公开。先只显示金额和“已付”标记，不接支付。
+
+**整洁度**（沿用 v0.1）
+- 综合评分取最近 100 次，整洁度取最近 20 次，满 3 次才显示。
+- 整洁度至少 5 次评分且平均低于 3.5，提醒车主更新照片；低于 3.0，暂停这辆车的公开班次。
+
+**徽章**（名称在 i18n 文件）
+- 初次拼车：完成第一趟。
+- 好邻居：完成 5 趟以上、评分 4.5 以上、90 天内没有缺席。
+- 准时达人：连续 10 趟没有缺席。
+- 整洁车主：整洁度 4.5 以上（至少 5 次评分）。
+- 拼单热心人：发起并完成 3 次拼单。
+
+**优惠券和积分**（先做展示，线下使用）
+- 行程完成且坐满，车主得 10 积分 ⚙；有库存时再发一张优惠券。
+
+---
+
+## 5. 页面路由
+
+底部 5 个 Tab：**首页 ｜ 找车 ｜ 小区 ｜ 消息 ｜ 我的**。首页按当前身份显示不同内容。
+
+| 路由 | 页面 | 说明 |
 |---|---|---|
-| M0 | 项目脚手架、Tailwind、i18n、**油费分摊纯函数 + 单测** | `npm test` |
-| M1 | Supabase 迁移、种子、手机号登录、角色、社区、车主分级 | 本地 Supabase + 种子账号登录 |
-| M2 | 车辆档案 + 照片 | |
-| M3 | 发班次、重复/跳过、截止自动取消、可见性 | dev 页手动触发调度 |
-| M4 | 浏览筛选、报名、关注、接受/拒绝 | |
-| M5 | 路线、地图、逐段费用实时预估 | 无 key 走模拟 |
-| M6 | PIN 上车、群聊、分享、SOS | |
-| M7 | 代买 | |
-| M8 | 账单与结算 | |
-| M9 | 评分与整洁度规则 | |
-| M10 | 帮助申诉 + 管理后台 | |
+| **未登录** | | |
+| `/` | 入口 | 已登录去 `/home`，未登录去 `/welcome` |
+| `/welcome` | 介绍页 | 产品说明、登录入口 |
+| `/login` → `/login/verify` | 手机号、验证码 | |
+| `/privacy` | 隐私政策 | 写明收集哪些数据、用途、存放地、如何查看和删除（PIPEDA） |
+| `/terms` | 用户协议 | |
+| `/s?t=…` | 分享的行程 | 只读：目的地、时间、集合点、车型颜色，不显示车牌全号和电话 |
+| **引导** | | |
+| `/onboarding` | 注册引导 | 昵称 → 主要身份 → 加入社区（住址或学校邮箱）→ 开启通知 → 提示加到主屏幕 |
+| **Tab** | | |
+| `/home` | 首页 | 乘客：附近班次、我报名的、关注车主的新班次。车主：我的班次、待处理报名、发班次入口 |
+| `/explore` | 找车 | 地图和列表切换；按目的地、日期、有空位筛选；每个集合点显示离我多远（在手机上计算，不上传位置） |
+| `/community?id=…` | 小区主页 | 本小区的班次、拼单、闲置帖子三栏 |
+| `/inbox` | 消息 | 通知 + 我的班次群聊入口 |
+| `/me` | 我的 | 资料、身份切换、认证、车辆、信用分、徽章、优惠券和积分、关注、设置 |
+| **班次** | | |
+| `/trips/new` | 发班次 | 目的地、时间、座位、车辆、1–3 个集合点（可选官方点）、最低成团、每周重复 |
+| `/trips/detail?id=…` | 班次详情 | 集合点和距离、车辆卡、车主资料、油费预估和公式；报名、提议集合点、关注车主 |
+| `/trips/manage?id=…` | 车主管理 | 审批报名（满座不能再接受）、审批集合点提议、取消班次 |
+| `/trips/route?id=…` | 路线和油费 | 地图、站点、逐段公里数和每人分摊 |
+| `/trips/board?id=…` | 上车 | 车主输入 PIN、满 5 分钟后可标记缺席；乘客看自己的 PIN；SOS（拨打 911 前确认） |
+| `/trips/chat?id=…` | 班次群聊 | 快捷短语、拼单入口 |
+| `/trips/bill?id=…` | 账单 | 每人应付、标记已付 / 已收到 |
+| `/trips/review?id=…` | 评价 | 星级、标签；乘客另给整洁度 |
+| `/series?id=…` | 重复班次 | 各期列表、跳过某一期、停止 |
+| **社交** | | |
+| `/group-buys/new?trip=…`、`/group-buys/detail?id=…` | 拼单分装 | 发起、参加（几份）、录入小票金额、每份分摊 |
+| `/posts/new?community=…`、`/posts/detail?id=…` | 小区帖子 | 闲置交换、免费送、求购、通知；评论 |
+| `/profile?id=…` | 用户主页 | 评分、徽章、车辆、即将出发的班次、关注 |
+| `/report?type=…&id=…` | 举报 | |
+| **我的** | | |
+| `/me/edit`、`/me/vehicle`、`/me/verify` | 资料、车辆档案和照片、认证中心 | |
+| `/me/credit`、`/me/badges`、`/me/rewards` | 信用分记录、徽章、优惠券和积分 | |
+| `/me/following`、`/me/trips`、`/me/settings` | 关注、历史行程、语言 / 通知 / 删除账号 | |
+| **管理后台**（管理员） | | |
+| `/admin` | 概览 | |
+| `/admin/users` | 用户 | 搜索、暂停 / 恢复、设为完整级、调整信用分 |
+| `/admin/trips` | 班次 | 查看、取消 |
+| `/admin/meeting-points` | 官方集合点 | 地图选点、新增、停用 |
+| `/admin/coupons` | 优惠券 | 录入、导入券码、发放记录 |
+| `/admin/reports` | 举报 | 处理、记录结果 |
+| `/admin/communities` | 社区（补充） | 新建小区（中心点和半径）、学校邮箱域名、开通申请 |
+| `/admin/fuel-prices` | 油价（补充） | 设置 GTA 平均油价 |
 
-本地运行前置：Node 20+、Docker（运行 `supabase start`）、Supabase CLI。
+---
+
+## 6. PWA 与打包
+
+- `manifest.webmanifest` 加图标，可以加到手机主屏幕；自己写一个小的 service worker，负责推送通知和应用外壳缓存。
+- iPhone 需要 iOS 16.4 以上，并且先“添加到主屏幕”才能收网页推送。引导页会提示。
+- 以后打包：`capacitor.config.ts` 指向 `out/`；用到的插件包括推送、定位、分享、相机、本地存储。苹果审核对“只是把网站包一层”的 APP 比较严格，原生推送、定位、相机这些功能有帮助，打包时再具体评估。
+
+---
+
+## 7. 环境变量（只放占位，不填真实 key）
+
+| 变量 | 用在哪 |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | 前端 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 前端（新版控制台叫 publishable key） |
+| `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | 前端显示地图（限制域名） |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | 前端订阅网页推送 |
+| `GOOGLE_MAPS_SERVER_KEY` | Edge Function：地址联想、算路线 |
+| `VAPID_PRIVATE_KEY`、`VAPID_SUBJECT` | Edge Function：发网页推送 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 只在 Edge Function 里用，绝不进前端 |
+| 短信服务商（如 Twilio）凭证 | 配在 Supabase 登录设置里，不进代码 |
+
+没有 Google 地图 key 时自动用模拟数据（直线距离 × 1.3、预置的 GTA 地址），本地开发不依赖真实 key。本地登录用测试验证码，不发真实短信。
+
+---
+
+## 8. 隐私（PIPEDA）
+
+- 只收集需要的：手机号、昵称、可选的住址（只用来匹配小区、在手机上算离集合点多远，不公开）、学校邮箱、车辆信息、照片、群聊、评价。
+- 位置只显示到集合点；集合点必须是公共场所，不用私人住址。
+- 社区成员名单不公开，防止别人推断谁住在哪栋楼。
+- 用户可以在设置里删除账号。
+- 隐私政策页写明：收集什么、用途、存在哪里（Supabase 加拿大区；地图请求发给 Google，短信经短信服务商）、保存多久、怎么查看 / 更正 / 删除、联系方式。**正式上线前需请律师审阅。**
+
+---
+
+## 9. 开发顺序（每完成一步告诉你怎么在本地运行和测试）
+
+| # | 模块 | 怎么测 |
+|---|---|---|
+| M0 | 脚手架：Next.js、Tailwind、i18n、PWA 外壳、可静态导出；油费分摊纯函数和单元测试 | `npm test`、`npm run dev` |
+| M1 | 本地 Supabase、迁移、种子数据；手机号登录（测试验证码）、引导、加入社区 | `supabase start`、`supabase db reset`、`supabase test db` |
+| M2 | 车辆档案和照片、官方集合点 | 用种子账号上传照片 |
+| M3 | 发班次（单次 / 重复）、算路线、定时任务（截止成团、生成下一期） | 开发页手动触发定时任务 |
+| M4 | 找车（地图 + 列表 + 距离）、报名、提议集合点、审批、关注、推送 | 两个浏览器分别登录车主和乘客 |
+| M5 | 上车 PIN、5 分钟缺席、信用分、限制报名 | |
+| M6 | 油费 AA：实时预估、结算、标记已付 | 结算和纯函数用同一组测试数据 |
+| M7 | 群聊、拼单分装、小区主页、闲置帖子 | |
+| M8 | 评价、整洁度、徽章 | |
+| M9 | 优惠券和积分 | |
+| M10 | 管理后台、举报、隐私政策和用户协议页 | |
+| M11 | PWA 打磨（安装提示、iOS 推送引导）、Capacitor 打包说明 | |
+
+本地运行需要：Node 20 以上、Docker（运行本地 Supabase）、Supabase CLI。
+
+---
+
+## 10. 请确认（以下是默认做法）
+
+1. T&T 的中文名就是大统华。种子数据先放 Costco、T&T（大统华）、IKEA；如果想加另一家超市，告诉我名字。
+2. MVP 只开社区班次（本楼 / 本小区 / 本校可见）。公开班次要求完整级，先由管理员手动设置。
+3. 乘客要先成为邻居级（加入一个社区）才能报名；只验证了手机号的用户可以浏览。
+4. 报名截止默认出发前 12 小时；截止后不再接受新报名。
+5. 车主不能定价：油价由管理员统一设，公里数只来自地图，取消 v0.1 的“手动改公里数”。
+6. 车主家到集合点那两段不公开、不分摊；回程默认按集合点倒序送。
+7. 一次报名最多 4 人（含本人），每人占一个座位、算一份 AA。
+8. 信用分规则按第 4 节的默认值。
+9. 满员奖励：10 积分，有库存时再发一张优惠券。这种奖励会不会被认定为“有偿载客”，需请律师确认。
+10. 保留 v0.1 的 SOS（拨打 911 前确认）和分享行程链接；v0.1 的代买清单和申诉裁决这次不做，先用举报代替。
+11. 社区成员名单不公开，社区页只显示人数。
