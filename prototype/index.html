@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>拼车购物 Carpool Shopping</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one phone-width column (max 480px) with sticky header and fixed bottom tab bar; one teal accent, teal-tinted greys. */
+:root {
+  --bg: #F4F7F6;
+  --surface: #FFFFFF;
+  --surface-2: #EAF0EE;
+  --line: #D9E2DF;
+  --fg: #14201D;
+  --muted: #5E6E6A;
+  --accent: #0D9488;
+  --accent-fg: #FFFFFF;
+  --accent-soft: #D7F0EC;
+  --warn: #B45309;
+  --warn-soft: #FDF0DC;
+  --bad: #B42318;
+  --bad-soft: #FBE4E1;
+  --good: #15803D;
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1513; --surface: #16201D; --surface-2: #1E2A27; --line: #2A3834;
+    --fg: #E6EEEC; --muted: #93A49F; --accent: #2DB8A9; --accent-fg: #062320; --accent-soft: #123A35;
+    --warn: #F0B35A; --warn-soft: #3A2A12; --bad: #F2867A; --bad-soft: #3E1C18; --good: #5BD08A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1513; --surface: #16201D; --surface-2: #1E2A27; --line: #2A3834;
+  --fg: #E6EEEC; --muted: #93A49F; --accent: #2DB8A9; --accent-fg: #062320; --accent-soft: #123A35;
+  --warn: #F0B35A; --warn-soft: #3A2A12; --bad: #F2867A; --bad-soft: #3E1C18; --good: #5BD08A;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.app { max-width: 480px; margin: 0 auto; min-height: 100%; background: var(--bg); padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px;
+  display: flex; align-items: center; gap: 10px; }
+header.top h1 { font-family: var(--font-display); font-size: 18px; margin: 0; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.back { border: 0; background: none; color: var(--fg); font-size: 22px; padding: 0 6px 0 0; cursor: pointer; line-height: 1; }
+.lang { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+select.persona { border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); border-radius: 999px; padding: 4px 8px; font-size: 12px; max-width: 120px; }
+main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px; display: flex; flex-direction: column; gap: 14px; }
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+nav.tabs .inner { max-width: 480px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
+nav.tabs a { text-decoration: none; color: var(--muted); font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 10px; position: relative; }
+nav.tabs a svg { width: 22px; height: 22px; }
+nav.tabs a.on { color: var(--accent); font-weight: 600; }
+nav.tabs .dot { position: absolute; top: 6px; left: calc(50% + 8px); background: var(--bad); color: #fff; font-size: 10px; border-radius: 999px; padding: 0 5px; line-height: 16px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+a.card { color: inherit; text-decoration: none; }
+a.card:active { background: var(--surface-2); }
+.row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.row.between { justify-content: space-between; }
+.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.xs { font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+h2 { font-family: var(--font-display); font-size: 17px; margin: 0; text-wrap: balance; }
+h3 { font-size: 13px; margin: 0; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.brand { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 13px; background: var(--accent-soft); color: var(--accent); flex: none; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.pill.accent { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); font-weight: 600; }
+.pill.good { color: var(--good); font-weight: 600; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; gap: 6px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--accent); padding: 6px 8px; }
+.btn.sm { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:focus-visible, .chip:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input, select, textarea { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; width: 100%; min-width: 0; }
+textarea { min-height: 70px; resize: vertical; }
+input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.err { color: var(--bad); font-size: 12px; }
+.photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.photo { aspect-ratio: 4/3; max-width: 100%; border-radius: 10px; background:
+  repeating-linear-gradient(135deg, var(--surface-2) 0 10px, var(--bg) 10px 20px); border: 1px solid var(--line);
+  display: flex; align-items: flex-end; padding: 6px 8px; font-size: 12px; color: var(--muted); }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat b { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.r, th.r { text-align: right; }
+tr.me td { background: var(--accent-soft); }
+tfoot td { font-weight: 700; border-bottom: 0; }
+.stop { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; }
+.stop .dotn { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--muted); }
+.stop.dest .dotn { background: var(--accent); color: var(--accent-fg); }
+.leg { margin-left: 13px; border-left: 2px dashed var(--line); padding: 6px 0 6px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.leg input { width: 76px; padding: 4px 6px; }
+.pin { font-family: var(--font-display); font-size: 40px; letter-spacing: .3em; font-weight: 700; color: var(--accent); text-align: center; }
+.msgs { display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.msg.mine { align-self: flex-end; background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.msg .who { font-size: 11px; opacity: .75; }
+.stars { display: flex; gap: 4px; }
+.stars button { border: 0; background: none; font-size: 28px; color: var(--line); cursor: pointer; padding: 0; line-height: 1; }
+.stars button.on { color: var(--accent); }
+.banner { border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+.banner.warn { background: var(--warn-soft); color: var(--warn); }
+.banner.bad { background: var(--bad-soft); color: var(--bad); }
+.banner.info { background: var(--accent-soft); color: var(--accent); }
+.sos { background: var(--bad); color: #fff; border: 0; border-radius: 999px; font-weight: 700; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; display: grid; place-items: center;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.modal { background: var(--surface); border-radius: 18px; padding: 18px; max-width: 360px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 13px; max-width: calc(100% - 32px); }
+.suggest { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.suggest button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.suggest button:last-child { border-bottom: 0; }
+.list { display: flex; flex-direction: column; gap: 0; }
+.list > * { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.list > *:last-child { border-bottom: 0; }
+.tag-sel { display: flex; flex-wrap: wrap; gap: 6px; }
+.demo-note { font-size: 12px; color: var(--muted); text-align: center; }
+@media (prefers-reduced-motion: no-preference) { .btn, .chip { transition: background .15s, border-color .15s; } }
+</style>
+
+</head>
+<body>
+<div class="app" id="app"></div>
+<div id="layer"></div>
+
+<script>
+/* ---------- Fare split: pure function (same algorithm as the planned src/lib/fare/splitFare.ts) ---------- */
+function splitFare({ fuelLPer100km, gasPricePerL, legs }) {
+  if (fuelLPer100km < 3 || fuelLPer100km > 25) throw new Error("fuel out of range");
+  if (gasPricePerL < 0.5 || gasPricePerL > 3.5) throw new Error("gas price out of range");
+  const costPerKm = fuelLPer100km / 100 * gasPricePerL;
+  const exact = {}; let totalExact = 0;
+  const legsOut = legs.map(l => {
+    if (l.km < 0 || !l.riders.length) throw new Error("bad leg");
+    const cost = l.km * costPerKm; totalExact += cost;
+    const per = cost / l.riders.length;
+    l.riders.forEach(r => { exact[r] = (exact[r] || 0) + per * 100; });
+    return { km: l.km, cost, riders: l.riders, per };
+  });
+  const totalCents = Math.round(totalExact * 100 + 1e-9);
+  const ids = Object.keys(exact);
+  const shares = {}; let floorSum = 0;
+  ids.forEach(id => { shares[id] = Math.floor(exact[id] + 1e-9); floorSum += shares[id]; });
+  let rest = totalCents - floorSum;
+  const order = ids.slice().sort((a, b) => ((exact[b] - Math.floor(exact[b] + 1e-9)) - (exact[a] - Math.floor(exact[a] + 1e-9))) || a.localeCompare(b));
+  for (let i = 0; rest > 0; i = (i + 1) % order.length, rest--) shares[order[i]] += 1;
+  return { costPerKm, totalCents, shares, exact, legs: legsOut };
+}
+
+/* ---------- Demo data ---------- */
+const PEOPLE = {
+  lily: { zh: "Lily", en: "Lily", role: "driver" },
+  amy: { zh: "Amy", en: "Amy" }, ben: { zh: "Ben", en: "Ben" }, chen: { zh: "Chen", en: "Chen" },
+  dana: { zh: "Dana", en: "Dana" }, eric: { zh: "Eric", en: "Eric" }, wei: { zh: "Wei", en: "Wei" },
+  kevin: { zh: "Kevin", en: "Kevin" }, admin: { zh: "管理员", en: "Admin" }
+};
+const PLACES = [
+  { id: "p_lily", zh: "Lily 家 · Yonge & Sheppard", en: "Lily's home · Yonge & Sheppard", lat: 43.7615, lng: -79.4111 },
+  { id: "p_amy", zh: "5168 Yonge St 大堂", en: "5168 Yonge St lobby", lat: 43.7700, lng: -79.4130 },
+  { id: "p_ben", zh: "Bathurst & Finch 公交站", en: "Bathurst & Finch bus stop", lat: 43.7768, lng: -79.4446 },
+  { id: "p_dana", zh: "Finch 地铁站 B 出口", en: "Finch Station Exit B", lat: 43.7807, lng: -79.4157 },
+  { id: "p_costco", zh: "Costco North York · 100 Billy Bishop Way", en: "Costco North York · 100 Billy Bishop Way", lat: 43.7250, lng: -79.4720 },
+  { id: "p_x1", zh: "Mel Lastman Square", en: "Mel Lastman Square", lat: 43.7677, lng: -79.4148 },
+  { id: "p_x2", zh: "North York Centre 地铁站", en: "North York Centre Station", lat: 43.7684, lng: -79.4128 },
+  { id: "p_x3", zh: "Empress Walk", en: "Empress Walk", lat: 43.7690, lng: -79.4125 }
+];
+// Driving distances returned by the (mocked) Directions API for the seeded route
+const KNOWN_KM = { "o|pk:amy": 1.7, "pk:amy|pk:ben": 2.4, "pk:ben|dest": 8.5, "dest|dr:ben": 8.8, "dr:ben|dr:amy": 2.9, "dr:amy|ret": 1.7 };
+
+function freshState() {
+  return {
+    lang: "zh", persona: "amy", toast: "", modal: null,
+    filter: { brand: "all", date: "all", seats: false },
+    following: { lily: true },
+    trips: [
+      { id: "t1", driver: "lily", brand: "Costco", store: { zh: "Costco North York", en: "Costco North York" }, date: "2026-11-21", dow: 6, win: "10:00–12:00",
+        seats: 3, min: 2, deadline: { zh: "周五 22:00 截止", en: "Closes Fri 22:00" }, visibility: "public", gas: 1.69, status: "confirmed", series: "s1" },
+      { id: "t2", driver: "wei", brand: "T&T", store: { zh: "T&T Promenade", en: "T&T Promenade" }, date: "2026-11-21", dow: 6, win: "14:00–16:00",
+        seats: 2, min: 2, deadline: { zh: "周六 08:00 截止", en: "Closes Sat 08:00" }, visibility: "community", community: { zh: "同小区可见 · Avondale", en: "Neighbours only · Avondale" }, gas: 1.62, status: "open", accepted: 1 },
+      { id: "t3", driver: "lily", brand: "IKEA", store: { zh: "IKEA North York", en: "IKEA North York" }, date: "2026-11-22", dow: 0, win: "13:00–15:00",
+        seats: 2, min: 2, deadline: { zh: "今晚 20:00 截止", en: "Closes tonight 20:00" }, visibility: "public", gas: 1.69, status: "open", accepted: 1, risk: true },
+      { id: "t4", driver: "kevin", brand: "Costco", store: { zh: "Costco Scarborough", en: "Costco Scarborough" }, date: "2026-11-22", dow: 0, win: "09:00–11:00",
+        seats: 3, min: 2, deadline: { zh: "周六 21:00 截止", en: "Closes Sat 21:00" }, visibility: "public", gas: 1.65, status: "confirmed", accepted: 3 }
+    ],
+    drivers: {
+      lily: { rating: 4.8, ratingN: 46, clean: 4.6, cleanN: 20, tier: "full", car: { zh: "Honda Odyssey · 白色", en: "Honda Odyssey · White" }, plate: "CRPL 214", seatsTotal: 7, trunk: "large", fuel: 8.5, pets: false, smoke: false, photoDays: 3 },
+      wei: { rating: 4.9, ratingN: 12, clean: 4.8, cleanN: 9, tier: "neighbor", car: { zh: "Toyota RAV4 · 灰色", en: "Toyota RAV4 · Grey" }, plate: "BKMR 551", seatsTotal: 5, trunk: "medium", fuel: 7.8, pets: true, smoke: false, photoDays: 12 },
+      kevin: { rating: null, ratingN: 2, clean: null, cleanN: 2, tier: "full", car: { zh: "Kia Sorento · 蓝色", en: "Kia Sorento · Blue" }, plate: "DXTN 908", seatsTotal: 7, trunk: "large", fuel: 9.6, pets: false, smoke: false, photoDays: 41 }
+    },
+    bookings: [
+      { id: "b1", trip: "t1", who: "amy", status: "accepted", pin: "4827", boarded: false, pickup: "p_amy" },
+      { id: "b2", trip: "t1", who: "ben", status: "accepted", pin: "1390", boarded: false, pickup: "p_ben" },
+      { id: "b3", trip: "t1", who: "dana", status: "pending", pickup: "p_dana", note: { zh: "我带两个大箱子", en: "I'll bring two big boxes" } },
+      { id: "b4", trip: "t1", who: "eric", status: "pending", pickup: "p_x1", note: { zh: "", en: "" } }
+    ],
+    route: { t1: ["o", "pk:amy", "pk:ben", "dest", "dr:ben", "dr:amy", "ret"] },
+    manualKm: {},
+    series: { s1: { skips: { "2026-12-05": true } } },
+    messages: [
+      { who: "lily", text: { zh: "大家好，周六 10 点准时出发，先接 Amy 再接 Ben。", en: "Hi all, leaving 10:00 sharp Saturday. Amy first, then Ben." } },
+      { who: "ben", text: { zh: "收到 👍", en: "Got it 👍" } }
+    ],
+    errand: { id: "e1", requester: "chen", handoff: { zh: "Avondale 小区 3 号楼大堂", en: "Avondale Bldg 3 lobby" }, budget: 60, claimedBy: null, receipt: "",
+      items: [
+        { name: { zh: "Kirkland 鸡蛋 24 只", en: "Kirkland eggs, 24 pack" }, qty: 1, done: false },
+        { name: { zh: "有机牛奶 3×2L", en: "Organic milk 3×2L" }, qty: 1, done: false },
+        { name: { zh: "三文鱼片（约 1kg）", en: "Salmon fillet (~1kg)" }, qty: 1, done: false }
+      ] },
+    bill: [
+      { id: "l1", kind: "fuel", payer: "amy", payee: "lily", cents: null, status: "unpaid" },
+      { id: "l2", kind: "fuel", payer: "ben", payee: "lily", cents: null, status: "unpaid" },
+      { id: "l3", kind: "errand", payer: "chen", payee: "amy", cents: 4780, status: "marked" },
+      { id: "l4", kind: "dispute", payer: "ben", payee: "lily", cents: 1500, status: "unpaid", note: { zh: "申诉裁决：后备箱饮料洒漏清洁费", en: "Ruling: trunk spill cleaning fee" } }
+    ],
+    rating: { stars: 0, tags: {}, clean: 0, cleanTags: {} },
+    verifications: [
+      { id: "v1", who: "wei", tier: "full", status: "pending", sub: { zh: "驾照 + 车辆保险（模拟上传）· 背景调查：模拟通过", en: "Licence + insurance (mock upload) · Background check: mock clear" } },
+      { id: "v2", who: "eric", tier: "neighbor", status: "pending", sub: { zh: "学校邮箱 @utoronto.ca 已验证", en: "School email @utoronto.ca verified" } }
+    ],
+    disputes: [
+      { id: "d1", who: "ben", type: "fare_error", status: "open", text: { zh: "第 4 段公里数好像多算了", en: "Leg 4 distance looks too high" } },
+      { id: "d2", who: "lily", type: "soiled_vehicle", status: "open", text: { zh: "后备箱饮料洒了，附照片 2 张", en: "Drink spilled in trunk, 2 photos attached" } }
+    ],
+    users: { kevin: "active", eric: "active", dana: "active" },
+    pinInput: {}, pickupQuery: "", joined: {}, helpType: "", helpPhotos: 0, helpEstimate: "", vehicleForm: null,
+    notifications: [
+      { t: { zh: "Lily 发布了新班次：周日 IKEA North York 13:00–15:00", en: "Lily posted a new trip: Sun IKEA North York 13:00–15:00" }, ago: { zh: "2 小时前", en: "2h ago" }, unread: true },
+      { t: { zh: "你的报名已被接受，上车 PIN：4827", en: "You're in! Boarding PIN: 4827" }, ago: { zh: "昨天", en: "Yesterday" }, unread: true },
+      { t: { zh: "班次「周三 T&T」截止时人数不足，已自动取消", en: "Trip “Wed T&T” was cancelled: not enough riders by the deadline" }, ago: { zh: "3 天前", en: "3d ago" }, unread: false }
+    ]
+  };
+}
+let S = freshState();
+
+/* ---------- helpers ---------- */
+const L = (zh, en) => S.lang === "zh" ? zh : en;
+const T = o => o ? (S.lang === "zh" ? o.zh : o.en) : "";
+const name = id => T(PEOPLE[id]) || id;
+const money = c => "$" + (c / 100).toFixed(2);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const place = id => PLACES.find(p => p.id === id);
+const tripById = id => S.trips.find(t => t.id === id);
+function hav(a, b) { const R = 6371, r = x => x * Math.PI / 180; const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function toast(msg) { S.toast = msg; render(); clearTimeout(toast.t); toast.t = setTimeout(() => { S.toast = ""; render(); }, 2200); }
+const dateLabel = (d, dow) => { const [, m, dd] = d.split("-"); const zw = "日一二三四五六"[dow]; const ew = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dow];
+  return L(`${+m}月${+dd}日 周${zw}`, `${ew}, ${["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m]} ${+dd}`); };
+
+/* ---------- route model for trip t1 ---------- */
+function stopInfo(key, trip) {
+  if (key === "o") return { label: place("p_lily"), kind: "origin" };
+  if (key === "ret") return { label: place("p_lily"), kind: "return" };
+  if (key === "dest") return { label: place("p_costco"), kind: "dest" };
+  const [k, who] = key.split(":"); const b = S.bookings.find(x => x.trip === trip && x.who === who);
+  return { label: place(b.pickup), kind: k === "pk" ? "pickup" : "dropoff", who };
+}
+function routeModel(tripId) {
+  const trip = tripById(tripId); const keys = S.route[tripId]; const drv = S.drivers[trip.driver];
+  const legs = [];
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1], key = a + "|" + b;
+    const riders = [trip.driver];
+    keys.forEach((k, j) => { if (k.startsWith("pk:")) { const w = k.slice(3); const d = keys.indexOf("dr:" + w); if (j <= i && d > i) riders.push(w); } });
+    const manual = S.manualKm[key];
+    let km = manual != null ? manual : KNOWN_KM[key];
+    if (km == null) km = Math.round(hav(stopInfo(a, tripId).label, stopInfo(b, tripId).label) * 1.3 * 10) / 10;
+    legs.push({ key, from: a, to: b, km, manual: manual != null, riders });
+  }
+  const fare = splitFare({ fuelLPer100km: drv.fuel, gasPricePerL: trip.gas, legs });
+  return { trip, keys, legs, fare, drv };
+}
+function syncBill() {
+  const { fare } = routeModel("t1");
+  S.bill.forEach(l => { if (l.kind === "fuel") l.cents = fare.shares[l.payer] || 0; });
+}
+
+/* ---------- icons ---------- */
+const I = {
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  trips: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3z"/><circle cx="7.5" cy="13.5" r=".8"/><circle cx="16.5" cy="13.5" r=".8"/></svg>',
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg>',
+  me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'
+};
+
+/* ---------- views ---------- */
+function brandBox(b) { return `<div class="brand">${b === "Costco" ? "COST" : b === "T&T" ? "T&amp;T" : "IKEA"}</div>`; }
+function ratingText(d) {
+  if (d.rating == null || d.ratingN < 3) return `<span class="pill">${L("新车主 · 评分满 3 次后显示", "New · shown after 3 ratings")}</span>`;
+  return `<span class="pill">★ ${d.rating.toFixed(1)} <span class="muted">(${d.ratingN})</span></span>`;
+}
+function seatsLeft(t) { const acc = t.id === "t1" ? S.bookings.filter(b => b.trip === "t1" && (b.status === "accepted")).length : (t.accepted || 0); return { acc, left: t.seats - acc }; }
+
+function tripCard(t) {
+  const d = S.drivers[t.driver]; const { acc, left } = seatsLeft(t);
+  return `<a class="card" href="#trip-${t.id}">
+    <div class="row">${brandBox(t.brand)}
+      <div class="grow"><h2>${esc(T(t.store))}</h2><div class="muted small num">${dateLabel(t.date, t.dow)} · ${t.win}</div></div>
+      ${left > 0 ? `<span class="pill accent num">${L(`剩 ${left} 座`, `${left} seat${left > 1 ? "s" : ""} left`)}</span>` : `<span class="pill">${L("已满", "Full")}</span>`}
+    </div>
+    <div class="row wrap small">
+      <span>${name(t.driver)}</span>${ratingText(d)}
+      <span class="muted">${esc(T(d.car))} · ${L(`照片更新于 ${d.photoDays} 天前`, `photos updated ${d.photoDays}d ago`)}</span>
+    </div>
+    <div class="row wrap">
+      ${t.visibility === "community" ? `<span class="pill accent">${esc(T(t.community))}</span>` : ""}
+      <span class="pill">${esc(T(t.deadline))}</span>
+      <span class="pill num">${L(`成团 ${acc}/${t.min}`, `${acc}/${t.min} to go`)}</span>
+      ${t.risk ? `<span class="pill warn">${L("人数不足将自动取消", "Cancels if not enough riders")}</span>` : ""}
+      ${S.following[t.driver] ? `<span class="pill">${L("已关注", "Following")}</span>` : ""}
+    </div>
+  </a>`;
+}
+
+function viewDiscover() {
+  const f = S.filter;
+  let list = S.trips.filter(t => (f.brand === "all" || t.brand === f.brand) && (f.date === "all" || t.date === f.date) && (!f.seats || seatsLeft(t).left > 0));
+  list.sort((a, b) => (S.following[b.driver] ? 1 : 0) - (S.following[a.driver] ? 1 : 0));
+  const chip = (k, v, label) => `<button class="chip ${f[k] === v ? "on" : ""}" data-act="filter" data-k="${k}" data-v="${v}">${label}</button>`;
+  return `
+    <div class="chips">${chip("brand", "all", L("全部", "All"))}${chip("brand", "Costco", "Costco")}${chip("brand", "T&T", "T&amp;T")}${chip("brand", "IKEA", "IKEA")}</div>
+    <div class="chips">${chip("date", "all", L("任意日期", "Any date"))}${chip("date", "2026-11-21", dateLabel("2026-11-21", 6))}${chip("date", "2026-11-22", dateLabel("2026-11-22", 0))}
+      <button class="chip ${f.seats ? "on" : ""}" data-act="seats">${L("只看有空位", "Seats available")}</button></div>
+    ${list.length ? list.map(tripCard).join("") : `<div class="card muted">${L("没有符合条件的班次。换个日期试试，或关注常去的车主，他们发班次时会通知你。", "No trips match. Try another date, or follow drivers to get notified when they post.")}</div>`}
+    <p class="demo-note">${L("演示数据 · 右上角可切换身份：乘客 Amy / 车主 Lily / 管理员", "Demo data · switch persona top-right: rider Amy / driver Lily / admin")}</p>`;
+}
+
+function vehicleCard(drvId) {
+  const d = S.drivers[drvId];
+  const trunk = { small: L("小", "Small"), medium: L("中", "Medium"), large: L("大", "Large") }[d.trunk];
+  return `<div class="card">
+    <div class="row between"><h2>${esc(T(d.car))}</h2><span class="pill">${L(`照片更新于 ${d.photoDays} 天前`, `Photos updated ${d.photoDays}d ago`)}</span></div>
+    <div class="photos"><div class="photo">${L("座椅", "Seats")}</div><div class="photo">${L("后备箱", "Trunk")}</div></div>
+    <div class="grid3">
+      <div class="stat"><span class="xs muted">${L("座位", "Seats")}</span><b>${d.seatsTotal}</b></div>
+      <div class="stat"><span class="xs muted">${L("后备箱", "Trunk")}</span><b>${trunk}</b></div>
+      <div class="stat"><span class="xs muted">L/100km</span><b>${d.fuel}</b></div>
+    </div>
+    <div class="row wrap">
+      <span class="pill">${d.pets ? L("车上有宠物", "Pets on board") : L("无宠物", "No pets")}</span>
+      <span class="pill">${d.smoke ? L("吸烟", "Smoking") : L("禁烟", "No smoking")}</span>
+      ${d.clean != null && d.cleanN >= 3 ? `<span class="pill accent">${L("整洁度", "Cleanliness")} ${d.clean.toFixed(1)} <span class="muted">(${L("近", "last")} ${Math.min(d.cleanN, 20)})</span></span>` : `<span class="pill">${L("整洁度：评分满 3 次后显示", "Cleanliness shown after 3 ratings")}</span>`}
+      <span class="pill">${L("车牌", "Plate")} ${d.plate.slice(0, 2)}•• •••</span>
+    </div>
+  </div>`;
+}
+
+function fareTable(tripId, focus) {
+  const m = routeModel(tripId);
+  const people = Object.keys(m.fare.shares);
+  return `
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>${L("段", "Leg")}</th><th class="r">km</th><th class="r">${L("油费", "Cost")}</th><th class="r">${L("人数", "Riders")}</th><th class="r">${focus ? name(focus) : L("每人", "Each")}</th></tr></thead>
+      <tbody>${m.legs.map((l, i) => { const on = !focus || l.riders.includes(focus); const per = m.fare.legs[i].per;
+        return `<tr><td>${i + 1}${l.manual ? ` <span class="pill warn">${L("手动", "Manual")}</span>` : ""}</td><td class="r">${l.km.toFixed(1)}</td><td class="r">$${m.fare.legs[i].cost.toFixed(4)}</td><td class="r">${l.riders.length}</td><td class="r">${on ? "$" + per.toFixed(4) : "—"}</td></tr>`; }).join("")}</tbody>
+    </table></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>${L("人", "Person")}</th><th class="r">${L("精确值", "Exact")}</th><th class="r">${L("应付", "Share")}</th></tr></thead>
+      <tbody>${people.map(p => `<tr class="${p === focus ? "me" : ""}"><td>${name(p)}${p === m.trip.driver ? ` <span class="muted xs">${L("车主", "driver")}</span>` : ""}</td><td class="r">${(m.fare.exact[p] / 100).toFixed(4)}</td><td class="r"><b>${money(m.fare.shares[p])}</b></td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>${L("合计", "Total")}</td><td></td><td class="r">${money(people.reduce((s, p) => s + m.fare.shares[p], 0))}</td></tr></tfoot>
+    </table></div>
+    <p class="xs muted">${L(`每公里 = ${m.drv.fuel}/100 × $${m.trip.gas.toFixed(2)} = $${m.fare.costPerKm.toFixed(5)}。每段油费由当时车上所有人平分（含车主），用最大余数法取整到分，所有人加起来正好等于总油费 ${money(m.fare.totalCents)}。`,
+      `Per km = ${m.drv.fuel}/100 × $${m.trip.gas.toFixed(2)} = $${m.fare.costPerKm.toFixed(5)}. Each leg is split among everyone in the car (driver included), rounded to the cent by largest remainder so shares add up to exactly ${money(m.fare.totalCents)}.`)}</p>`;
+}
+
+function viewTrip(id) {
+  const t = tripById(id); if (!t) return `<div class="card">${L("找不到班次", "Trip not found")}</div>`;
+  const d = S.drivers[t.driver]; const { acc, left } = seatsLeft(t); const me = S.persona;
+  const myBooking = S.bookings.find(b => b.trip === id && b.who === me);
+  const joined = S.joined[id];
+  let action = "";
+  if (me === t.driver) action = `<div class="grid2"><a class="btn primary" href="#drive">${L("处理报名", "Review requests")}</a><a class="btn" href="#route-${id}">${L("编辑路线", "Edit route")}</a></div>`;
+  else if (myBooking && myBooking.status === "accepted") action = `<div class="banner info">${L("你已上车名单 ✓ 出发当天把 PIN 给车主核对。", "You're confirmed ✓ Show your PIN to the driver at pickup.")}</div>`;
+  else if (joined) action = `<div class="banner info">${L(`已报名，上车点：${T(place(joined))}。等待车主确认。`, `Requested. Pickup: ${T(place(joined))}. Waiting for the driver.`)}</div>`;
+  else if (left <= 0) action = `<button class="btn block" disabled>${L("座位已满", "Trip is full")}</button>`;
+  else {
+    const q = S.pickupQuery.trim().toLowerCase();
+    const sug = q ? PLACES.filter(p => !["p_costco", "p_lily"].includes(p.id) && (p.zh + p.en).toLowerCase().includes(q)).slice(0, 4) : [];
+    action = `<label class="f" for="pickup">${L("上车点（输入地址联想）", "Pickup point (type to search)")}
+        <input id="pickup" data-input="pickup" value="${esc(S.pickupQuery)}" placeholder="${L("例如 Yonge、Finch、Empress", "e.g. Yonge, Finch, Empress")}" autocomplete="off"></label>
+      ${sug.length ? `<div class="suggest">${sug.map(p => `<button data-act="join" data-trip="${id}" data-place="${p.id}">${esc(T(p))}</button>`).join("")}</div>` : `<p class="xs muted">${L("选中联想地址即提交报名。", "Pick a suggestion to send your request.")}</p>`}`;
+  }
+  const showFare = id === "t1";
+  return `
+    <div class="card">
+      <div class="row">${brandBox(t.brand)}<div class="grow"><h2>${esc(T(t.store))}</h2><div class="muted small num">${dateLabel(t.date, t.dow)} · ${t.win}</div></div></div>
+      <div class="row wrap">
+        <span class="pill accent num">${left > 0 ? L(`剩 ${left} 座`, `${left} left`) : L("已满", "Full")}</span>
+        <span class="pill">${esc(T(t.deadline))}</span>
+        <span class="pill num">${L(`最低成团 ${t.min} 人 · 已有 ${acc}`, `Min ${t.min} riders · ${acc} in`)}</span>
+        ${t.series ? `<span class="pill">${L("每周重复", "Weekly")}</span>` : ""}
+      </div>
+      <div class="bar"><i style="width:${Math.min(100, acc / t.min * 100)}%"></i></div>
+      ${t.risk ? `<div class="banner warn">${L("截止时不满 2 人会自动取消，并通知所有报名的人。", "If fewer than 2 riders by the deadline, this trip cancels automatically and everyone is notified.")}</div>` : ""}
+      ${action}
+    </div>
+    <div class="card"><div class="row between"><div class="row"><b>${name(t.driver)}</b>${ratingText(d)}<span class="pill">${d.tier === "full" ? L("完整认证", "Fully verified") : L("邻居级", "Neighbour")}</span></div>
+      ${me !== t.driver ? `<button class="btn sm ${S.following[t.driver] ? "" : "primary"}" data-act="follow" data-d="${t.driver}">${S.following[t.driver] ? L("已关注", "Following") : L("关注", "Follow")}</button>` : ""}</div>
+      <p class="xs muted" style="margin:0">${L("关注后，车主发新班次时会通知你。", "Followers get notified when this driver posts.")}</p></div>
+    ${vehicleCard(t.driver)}
+    ${showFare ? `<div class="card"><div class="row between"><h2>${L("油费预估", "Fuel cost estimate")}</h2><span class="pill accent">${L("实时", "Live")}</span></div>
+      ${(() => { const m = routeModel(id); const mine = m.fare.shares[me]; return mine != null ? `<div class="stat"><span class="xs muted">${L("你的预估", "Your estimate")}</span><b>${money(mine)}</b></div>` : ""; })()}
+      ${fareTable(id, S.bookings.some(b => b.trip === id && b.who === me && b.status === "accepted") || me === t.driver ? me : null)}</div>
+      <div class="grid2">
+        <a class="btn" href="#route-${id}">${L("路线", "Route")}</a><a class="btn" href="#board-${id}">${L("上车 PIN", "Boarding PIN")}</a>
+        <a class="btn" href="#chat-${id}">${L("行程群聊", "Trip chat")}</a><a class="btn" href="#errands-${id}">${L("代买清单", "Errands")}</a>
+        <a class="btn" href="#bill-${id}">${L("账单", "Bill")}</a><a class="btn" href="#rate-${id}">${L("评分", "Rate")}</a>
+      </div>` : `<div class="card muted small">${L("车主接受乘客后会生成路线和逐段油费明细。完整演示请看 11 月 21 日 Costco 那一班。", "Route and per-leg costs appear once riders are accepted. See the Nov 21 Costco trip for the full demo.")}</div>`}`;
+}
+
+function viewRoute(id) {
+  const m = routeModel(id); const isDriver = S.persona === m.trip.driver;
+  const canMove = (i, dir) => { const k = m.keys[i], n = m.keys[i + dir]; if (!n) return false;
+    return (k.startsWith("pk:") && n.startsWith("pk:")) || (k.startsWith("dr:") && n.startsWith("dr:")); };
+  let html = "";
+  m.keys.forEach((k, i) => {
+    const s = stopInfo(k, id);
+    const kindLabel = { origin: L("出发", "Start"), return: L("返回", "Return"), dest: L("目的地", "Store"), pickup: L(`接 ${name(s.who)}`, `Pick up ${name(s.who)}`), dropoff: L(`送 ${name(s.who)}`, `Drop off ${name(s.who)}`) }[s.kind];
+    html += `<div class="stop ${s.kind === "dest" ? "dest" : ""}"><div class="dotn">${i + 1}</div>
+      <div style="min-width:0"><b class="small">${kindLabel}</b><div class="xs muted">${esc(T(s.label))}</div></div>
+      ${isDriver && (k.startsWith("pk:") || k.startsWith("dr:")) ? `<div class="row"><button class="btn sm" data-act="move" data-i="${i}" data-dir="-1" ${canMove(i, -1) ? "" : "disabled"} aria-label="up">↑</button><button class="btn sm" data-act="move" data-i="${i}" data-dir="1" ${canMove(i, 1) ? "" : "disabled"} aria-label="down">↓</button></div>` : "<span></span>"}</div>`;
+    if (i < m.legs.length) { const l = m.legs[i]; const share = m.fare.legs[i];
+      html += `<div class="leg"><span class="num">${isDriver ? `<input id="km-${i}" type="number" step="0.1" min="0" value="${l.km}" data-input="km" data-key="${l.key}" aria-label="km"> km` : `${l.km.toFixed(1)} km`}</span>
+        ${l.manual ? `<span class="pill warn">${L("手动", "Manual")}</span>` : `<span class="pill">${L("地图", "Maps")}</span>`}
+        <span class="muted">${l.riders.map(name).join(" · ")}</span><span class="muted num">$${share.cost.toFixed(2)} ÷ ${l.riders.length}</span></div>`; }
+  });
+  return `<div class="card"><div class="row between"><h2>${L("路线", "Route")}</h2><span class="pill num">${m.legs.reduce((s, l) => s + l.km, 0).toFixed(1)} km</span></div>
+      ${isDriver ? `<p class="xs muted" style="margin:0">${L("可以上下调整接人和送人的顺序；改过的公里数会标“手动”。", "Reorder pickups and drop-offs; edited distances are marked Manual.")}</p>` : ""}
+      ${html}
+      ${isDriver && Object.keys(S.manualKm).length ? `<button class="btn sm" data-act="resetkm">${L("恢复地图公里数", "Restore map distances")}</button>` : ""}
+    </div>
+    <div class="card"><h2>${L("逐段分摊", "Per-leg split")}</h2>${fareTable(id, S.persona === "admin" ? null : S.persona)}</div>
+    <p class="demo-note">${L("原型里用的是模拟距离；正式版接 Google Maps Directions。", "Prototype uses mocked distances; the real app calls Google Maps Directions.")}</p>`;
+}
+
+function viewBoard(id) {
+  const t = tripById(id); const me = S.persona;
+  const list = S.bookings.filter(b => b.trip === id && b.status === "accepted");
+  if (me === t.driver) {
+    return `<div class="card"><h2>${L("核对上车", "Check riders in")}</h2><p class="xs muted" style="margin:0">${L("乘客上车时，输入对方给你看的 4 位 PIN。", "Enter each rider's 4-digit PIN when they get in.")}</p>
+      <div class="list">${list.map(b => `<div class="row">
+        <div class="grow"><b>${name(b.who)}</b><div class="xs muted">${esc(T(place(b.pickup)))}</div></div>
+        ${b.boarded ? `<span class="pill good">✓ ${L("已上车", "On board")}</span>` : `<input id="pin-${b.id}" style="width:84px" inputmode="numeric" maxlength="4" placeholder="PIN" data-input="pin" data-b="${b.id}" value="${esc(S.pinInput[b.id] || "")}"><button class="btn sm primary" data-act="board" data-b="${b.id}">${L("确认", "Confirm")}</button>`}
+      </div>`).join("")}</div>
+      <p class="xs muted" style="margin:0">${L("演示 PIN：Amy 4827，Ben 1390", "Demo PINs: Amy 4827, Ben 1390")}</p></div>`;
+  }
+  const b = list.find(x => x.who === me);
+  if (!b) return `<div class="card muted">${L("报名被接受后会生成你的上车 PIN。", "Your PIN appears once your request is accepted.")}</div>`;
+  return `<div class="card" style="align-items:center"><h3>${L("你的上车 PIN", "Your boarding PIN")}</h3><div class="pin num">${b.pin}</div>
+    <p class="small muted" style="margin:0;text-align:center">${b.boarded ? L("车主已确认你上车 ✓", "Driver checked you in ✓") : L("上车时给车主看，车主输入后才算上车。", "Show this to the driver; you're on board once they enter it.")}</p></div>`;
+}
+
+const PHRASES = [
+  { zh: "我到上车点了", en: "I'm at the pickup point" }, { zh: "还有 5 分钟到", en: "5 minutes away" },
+  { zh: "堵车，晚 10 分钟", en: "Traffic, 10 min late" }, { zh: "在门口等你", en: "Waiting at the door" }, { zh: "收银台见", en: "Meet at checkout" }
+];
+function viewChat(id) {
+  return `<div class="row between"><button class="btn sm" data-act="share">${L("分享行程链接", "Share trip link")}</button><button class="sos" data-act="sos">SOS 911</button></div>
+    <div class="msgs">${S.messages.map(m => `<div class="msg ${m.who === S.persona ? "mine" : ""}"><div class="who">${name(m.who)}</div>${esc(T(m.text))}</div>`).join("")}</div>
+    <div class="chips">${PHRASES.map((p, i) => `<button class="chip" data-act="phrase" data-i="${i}">${esc(T(p))}</button>`).join("")}</div>
+    <form class="row" data-form="chat"><input id="chat-input" name="msg" placeholder="${L("发消息…", "Message…")}" autocomplete="off"><button class="btn primary" type="submit">${L("发送", "Send")}</button></form>`;
+}
+
+function viewErrands(id) {
+  const e = S.errand; const me = S.persona;
+  const onCar = me === "lily" || S.bookings.some(b => b.trip === id && b.who === me && b.status === "accepted");
+  const receipt = parseFloat(e.receipt);
+  const over = !isNaN(receipt) && receipt > e.budget;
+  return `<div class="card">
+    <div class="row between"><h2>${L(`${name(e.requester)} 的代买清单`, `${name(e.requester)}'s list`)}</h2>
+      ${e.claimedBy ? `<span class="pill accent">${L(`${name(e.claimedBy)} 已认领`, `Claimed by ${name(e.claimedBy)}`)}</span>` : `<span class="pill">${L("待认领", "Open")}</span>`}</div>
+    <div class="row wrap small"><span class="pill num">${L("预算上限", "Budget cap")} $${e.budget.toFixed(2)}</span><span class="pill">${L("交接", "Handoff")}：${esc(T(e.handoff))}</span></div>
+    <div class="list">${e.items.map((it, i) => `<label class="row" for="it-${i}"><input type="checkbox" id="it-${i}" data-act="check" data-i="${i}" ${it.done ? "checked" : ""} ${e.claimedBy === me ? "" : "disabled"}><span class="grow">${esc(T(it.name))}</span><span class="muted num">×${it.qty}</span></label>`).join("")}</div>
+    ${!e.claimedBy ? (onCar ? `<button class="btn primary" data-act="claim">${L("我来代买", "I'll get these")}</button>` : `<p class="xs muted" style="margin:0">${L("车上的人才能认领。", "Only people on this trip can claim.")}</p>`) : ""}
+    ${e.claimedBy === me ? `<label class="f" for="receipt">${L("小票金额（只报销小票金额，不收跑腿费）", "Receipt total (reimbursed at cost, no fees)")}<input id="receipt" type="number" step="0.01" min="0" data-input="receipt" value="${esc(e.receipt)}" placeholder="0.00"></label>
+      ${over ? `<div class="banner bad num">${L(`超出预算 $${(receipt - e.budget).toFixed(2)}，会提醒 ${name(e.requester)} 确认。`, `$${(receipt - e.budget).toFixed(2)} over budget. ${name(e.requester)} will be asked to confirm.`)}</div>` : ""}
+      <label class="f" for="receipt-photo">${L("小票照片（可选）", "Receipt photo (optional)")}<input id="receipt-photo" type="file" accept="image/*"></label>` : ""}
+  </div>
+  <p class="demo-note">${L("切换到车主 Lily 可认领和勾选；Chen 没上车，所以发了清单。", "Switch to Lily to claim and tick items. Chen isn't riding, so they posted a list.")}</p>`;
+}
+
+function viewBill(id) {
+  syncBill(); const me = S.persona;
+  const kindL = { fuel: L("油费", "Fuel"), errand: L("代买垫付", "Errand"), dispute: L("申诉裁决", "Dispute") };
+  const stL = { unpaid: L("未付", "Unpaid"), marked: L("付款方已付", "Marked paid"), confirmed: L("已确认收款", "Received") };
+  const m = routeModel(id);
+  return `<div class="banner info">${L("行程结束后路线已锁定。平台不经手资金：请用 Interac e-Transfer 线下转账。", "Route locked after the trip. We never hold money: pay each other by Interac e-Transfer.")}</div>
+    <div class="card"><div class="row between"><h2>${L("油费", "Fuel")}</h2><span class="pill num">${L("总计", "Total")} ${money(m.fare.totalCents)}</span></div>
+      <p class="xs muted" style="margin:0">${L(`车主自付 ${money(m.fare.shares[m.trip.driver])}（不生成付款）。`, `Driver covers own ${money(m.fare.shares[m.trip.driver])} (no payment).`)}</p></div>
+    ${S.bill.map(l => { const mine = l.payer === me, toMe = l.payee === me;
+      return `<div class="card"><div class="row between"><div class="grow"><b>${name(l.payer)} → ${name(l.payee)}</b><div class="xs muted">${kindL[l.kind]}${l.note ? " · " + esc(T(l.note)) : ""}</div></div><b class="num">${money(l.cents)}</b></div>
+        <div class="row between"><span class="pill ${l.status === "confirmed" ? "good" : l.status === "marked" ? "accent" : ""}">${stL[l.status]}</span>
+          ${mine && l.status === "unpaid" ? `<button class="btn sm primary" data-act="paid" data-l="${l.id}">${L("我已付款", "I've paid")}</button>` : ""}
+          ${toMe && l.status === "marked" ? `<button class="btn sm primary" data-act="confirm" data-l="${l.id}">${L("确认收款", "Confirm received")}</button>` : ""}
+        </div></div>`; }).join("")}
+    <p class="demo-note">${L("用 Amy 点“我已付款”，再切到 Lily 点“确认收款”。", "Mark paid as Amy, then switch to Lily to confirm.")}</p>`;
+}
+
+const RATE_TAGS = [{ zh: "准时", en: "On time" }, { zh: "友善", en: "Friendly" }, { zh: "开车稳", en: "Smooth driving" }, { zh: "沟通及时", en: "Good communication" }];
+const CLEAN_TAGS = [{ k: "seats_clean", zh: "座椅干净", en: "Clean seats" }, { k: "no_odor", zh: "无异味", en: "No odour" }, { k: "trunk_usable", zh: "后备箱可用", en: "Trunk usable" }, { k: "no_pet_hair", zh: "无宠物毛", en: "No pet hair" }, { k: "not_as_pictured", zh: "与照片不符", en: "Not as pictured" }];
+function viewRate(id) {
+  const r = S.rating; const t = tripById(id); const isDriver = S.persona === t.driver;
+  const stars = (k, v) => `<div class="stars">${[1, 2, 3, 4, 5].map(n => `<button data-act="star" data-k="${k}" data-n="${n}" class="${v >= n ? "on" : ""}" aria-label="${n}">★</button>`).join("")}</div>`;
+  return `<div class="card"><h2>${isDriver ? L("给乘客评分", "Rate your riders") : L(`给车主 ${name(t.driver)} 评分`, `Rate ${name(t.driver)}`)}</h2>${stars("stars", r.stars)}
+      <div class="tag-sel">${RATE_TAGS.map((g, i) => `<button class="chip ${r.tags[i] ? "on" : ""}" data-act="tag" data-i="${i}">${esc(T(g))}</button>`).join("")}</div></div>
+    ${isDriver ? "" : `<div class="card"><h2>${L("车辆整洁度", "Vehicle cleanliness")}</h2>${stars("clean", r.clean)}
+      <div class="tag-sel">${CLEAN_TAGS.map(g => `<button class="chip ${r.cleanTags[g.k] ? "on" : ""}" data-act="ctag" data-k="${g.k}">${esc(T(g))}</button>`).join("")}</div>
+      <p class="xs muted" style="margin:0">${L("综合分取最近 100 次平均，整洁度取最近 20 次，满 3 次评分才显示。整洁度 ≥5 次且低于 3.5 会提醒车主更新照片，低于 3.0 暂停公开班次。", "Overall = average of last 100; cleanliness = last 20; shown after 3 ratings. With 5+ ratings, below 3.5 asks the driver for new photos and below 3.0 pauses public trips.")}</p></div>`}
+    <button class="btn primary block" data-act="submitrate" ${r.stars ? "" : "disabled"}>${L("提交评分", "Submit")}</button>`;
+}
+
+function viewTrips() {
+  const me = S.persona;
+  const mine = S.trips.filter(t => t.driver === me || S.bookings.some(b => b.trip === t.id && b.who === me) || S.joined[t.id]);
+  return `<h3>${L("即将出发", "Upcoming")}</h3>${mine.length ? mine.map(tripCard).join("") : `<div class="card muted">${L("还没有行程。去“发现”找一班顺路的车。", "No trips yet. Find one in Discover.")}</div>`}
+    <h3>${L("已完成", "Past")}</h3>
+    <div class="card"><div class="row">${brandBox("Costco")}<div class="grow"><b>Costco North York</b><div class="xs muted">${L("11月14日 · 已结算", "Nov 14 · settled")}</div></div><span class="pill good">${L("已确认收款", "Settled")}</span></div></div>`;
+}
+
+function viewDrive() {
+  const me = S.persona;
+  if (me !== "lily") return `<div class="card"><h2>${L("成为车主", "Drive with us")}</h2>
+    <p class="small muted" style="margin:0">${L("邻居级：验证手机号 + 地址或学校邮箱，班次只对同楼/同小区/同校可见。完整级：身份认证 + 背景调查（模拟），由管理员审核，可以发公开班次。车主只分摊油费，不能赚钱。", "Neighbour: phone + address or school email; trips visible to your building, complex or school. Full: ID + background check (mocked), reviewed by an admin; can post public trips. Drivers only share fuel cost and never earn.")}</p>
+    <button class="btn primary" data-act="persona" data-p="lily">${L("切换到车主 Lily 看演示", "Switch to driver Lily")}</button></div>`;
+  const t = tripById("t1"); const reqs = S.bookings.filter(b => b.trip === "t1"); const { acc, left } = seatsLeft(t);
+  const s = S.series.s1; const dates = ["2026-11-21", "2026-11-28", "2026-12-05", "2026-12-12"];
+  return `<div class="row"><a class="btn primary grow" href="#post">${L("发班次", "Post a trip")}</a><a class="btn grow" href="#vehicle">${L("车辆档案", "Vehicle")}</a></div>
+    <div class="card"><div class="row between"><h2>${L("报名 · 11月21日 Costco", "Requests · Nov 21 Costco")}</h2><span class="pill accent num">${acc}/${t.seats} ${L("座", "seats")}</span></div>
+      <div class="list">${reqs.map(b => `<div class="row"><div class="grow"><b>${name(b.who)}</b><div class="xs muted">${esc(T(place(b.pickup)))}${b.note && T(b.note) ? " · " + esc(T(b.note)) : ""}</div></div>
+        ${b.status === "pending" ? `<button class="btn sm" data-act="reject" data-b="${b.id}">${L("拒绝", "Decline")}</button><button class="btn sm primary" data-act="accept" data-b="${b.id}" ${left <= 0 ? "disabled" : ""}>${left <= 0 ? L("已满", "Full") : L("接受", "Accept")}</button>`
+          : `<span class="pill ${b.status === "accepted" ? "good" : ""}">${b.status === "accepted" ? L("已接受", "Accepted") : L("已拒绝", "Declined")}</span>`}</div>`).join("")}</div>
+      <p class="xs muted" style="margin:0">${L("接受后上车点自动插入路线、重新计算每段公里数和油费。座位满了就不能再接受。", "Accepting inserts the pickup into the route and recalculates distances and costs. Once full, no more accepts.")}</p>
+      <a class="btn sm" href="#route-t1">${L("查看路线和油费", "See route & costs")}</a></div>
+    <div class="card"><div class="row between"><h2>${L("每周六 Costco 10:00–12:00", "Saturdays · Costco 10:00–12:00")}</h2><span class="pill">${L("重复班次", "Weekly")}</span></div>
+      <div class="list">${dates.map(d => `<div class="row"><span class="grow num">${dateLabel(d, 6)}</span>${s.skips[d] ? `<span class="pill">${L("已跳过", "Skipped")}</span>` : ""}<button class="btn sm" data-act="skip" data-d="${d}">${s.skips[d] ? L("恢复", "Restore") : L("跳过这期", "Skip")}</button></div>`).join("")}</div></div>
+    <div class="card"><div class="row between"><h2>${L("我的评分", "My ratings")}</h2></div>
+      <div class="grid2"><div class="stat"><span class="xs muted">${L("综合（近 100 次）", "Overall (last 100)")}</span><b>★ 4.8</b></div><div class="stat"><span class="xs muted">${L("整洁度（近 20 次）", "Cleanliness (last 20)")}</span><b>4.6</b></div></div></div>`;
+}
+
+function viewPost() {
+  return `<form class="card" data-form="post"><h2>${L("发班次", "Post a trip")}</h2>
+    <label class="f" for="pf-dest">${L("目的地", "Destination")}<select id="pf-dest"><option>Costco North York</option><option>T&amp;T Promenade</option><option>IKEA North York</option></select></label>
+    <div class="grid2"><label class="f" for="pf-date">${L("日期", "Date")}<input id="pf-date" type="date" value="2026-11-28"></label>
+      <label class="f" for="pf-seats">${L("空座数", "Seats")}<input id="pf-seats" type="number" min="1" max="6" value="3"></label></div>
+    <div class="grid2"><label class="f" for="pf-start">${L("开始", "From")}<input id="pf-start" type="time" value="10:00"></label><label class="f" for="pf-end">${L("结束", "To")}<input id="pf-end" type="time" value="12:00"></label></div>
+    <div class="grid2"><label class="f" for="pf-deadline">${L("报名截止（出发前小时）", "Close signups (hrs before)")}<input id="pf-deadline" type="number" min="1" value="12"></label>
+      <label class="f" for="pf-min">${L("最低成团人数", "Min riders")}<input id="pf-min" type="number" min="1" value="2"></label></div>
+    <label class="f" for="pf-gas">${L("油价 $/L（0.50–3.50）", "Gas $/L (0.50–3.50)")}<input id="pf-gas" type="number" step="0.01" min="0.5" max="3.5" value="1.69"></label>
+    <label class="row small" for="pf-weekly"><input type="checkbox" id="pf-weekly" checked> ${L("每周重复", "Repeat weekly")}</label>
+    <label class="f" for="pf-vis">${L("谁能看到", "Who can see it")}<select id="pf-vis"><option>${L("公开（完整级车主）", "Public (full drivers)")}</option><option>${L("仅同楼 / 同小区 / 同校", "Building / complex / school only")}</option></select></label>
+    <p class="err" id="post-err" hidden></p>
+    <button class="btn primary" type="submit">${L("发布", "Post")}</button></form>`;
+}
+
+function viewVehicle() {
+  const d = S.drivers.lily; const v = S.vehicleForm || { seats: d.seatsTotal, fuel: d.fuel };
+  const seatsBad = v.seats < 2 || v.seats > 7, fuelBad = v.fuel < 3 || v.fuel > 25;
+  return `<div class="card"><h2>${L("车辆档案", "Vehicle profile")}</h2>
+    <div class="grid2"><label class="f" for="vf-model">${L("车型", "Make & model")}<input id="vf-model" value="Honda Odyssey"></label><label class="f" for="vf-color">${L("颜色", "Colour")}<input id="vf-color" value="${L("白色", "White")}"></label></div>
+    <div class="grid2"><label class="f" for="vf-plate">${L("车牌", "Plate")}<input id="vf-plate" value="${d.plate}"></label>
+      <label class="f" for="vf-trunk">${L("后备箱", "Trunk")}<select id="vf-trunk"><option>${L("小", "Small")}</option><option>${L("中", "Medium")}</option><option selected>${L("大", "Large")}</option></select></label></div>
+    <div class="grid2"><label class="f" for="vf-seats">${L("座位数（2–7）", "Seats (2–7)")}<input id="vf-seats" type="number" data-input="vseats" value="${v.seats}">${seatsBad ? `<span class="err">${L("座位数需在 2–7 之间", "Must be 2–7")}</span>` : ""}</label>
+      <label class="f" for="vf-fuel">${L("油耗 L/100km（3–25）", "Fuel L/100km (3–25)")}<input id="vf-fuel" type="number" step="0.1" data-input="vfuel" value="${v.fuel}">${fuelBad ? `<span class="err">${L("油耗需在 3–25 之间", "Must be 3–25")}</span>` : ""}</label></div>
+    <label class="row small" for="vf-pets"><input type="checkbox" id="vf-pets"> ${L("车上有宠物", "Pets ride in this car")}</label>
+    <label class="row small" for="vf-smoke"><input type="checkbox" id="vf-smoke"> ${L("允许吸烟", "Smoking allowed")}</label>
+    <div class="photos"><div class="photo">${L("座椅 · 1 张", "Seats · 1 photo")}</div><div class="photo">${L("后备箱 · 1 张", "Trunk · 1 photo")}</div></div>
+    <label class="f" for="vf-photo">${L("上传新照片（座椅、后备箱各至少 1 张）", "Upload photos (at least 1 seat + 1 trunk)")}<input id="vf-photo" type="file" accept="image/*" multiple></label>
+    <p class="xs muted" style="margin:0">${L(`卡片显示“照片更新于 ${d.photoDays} 天前”。`, `Cards show “photos updated ${d.photoDays}d ago”.`)}</p>
+    <button class="btn primary" data-act="savevehicle" ${seatsBad || fuelBad ? "disabled" : ""}>${L("保存", "Save")}</button></div>`;
+}
+
+function viewInbox() {
+  return `<div class="card list">${S.notifications.map(n => `<div class="row"><span class="grow small">${n.unread ? "<b>" : ""}${esc(T(n.t))}${n.unread ? "</b>" : ""}</span><span class="xs muted">${esc(T(n.ago))}</span></div>`).join("")}</div>`;
+}
+
+function viewMe() {
+  const p = S.persona;
+  return `<div class="card"><div class="row"><div class="brand">${esc(name(p).slice(0, 2))}</div><div class="grow"><h2>${name(p)}</h2><div class="xs muted">+1 416 555 01xx · ${L("手机号已验证", "Phone verified")}</div></div></div>
+      <div class="row wrap"><span class="pill">${p === "lily" ? L("完整级车主", "Full driver") : p === "admin" ? L("管理员", "Admin") : L("乘客", "Rider")}</span><span class="pill">Yonge & Sheppard</span></div></div>
+    <div class="card"><h3>${L("语言", "Language")}</h3><div class="chips"><button class="chip ${S.lang === "zh" ? "on" : ""}" data-act="lang" data-v="zh">中文</button><button class="chip ${S.lang === "en" ? "on" : ""}" data-act="lang" data-v="en">English</button></div></div>
+    <div class="card"><h3>${L("我关注的车主", "Following")}</h3>${Object.keys(S.following).filter(k => S.following[k]).map(k => `<div class="row"><span class="grow">${name(k)}</span><button class="btn sm" data-act="follow" data-d="${k}">${L("取消关注", "Unfollow")}</button></div>`).join("") || `<span class="muted small">${L("还没有关注", "None yet")}</span>`}</div>
+    <div class="grid2"><a class="btn" href="#help">${L("帮助与申诉", "Help & claims")}</a>${p === "admin" ? `<a class="btn primary" href="#admin">${L("管理后台", "Admin")}</a>` : `<button class="btn" data-act="persona" data-p="admin">${L("切到管理员", "Be admin")}</button>`}</div>
+    <button class="btn ghost" data-act="reset">${L("重置演示数据", "Reset demo data")}</button>`;
+}
+
+const HELP_TYPES = [
+  { k: "soiled_vehicle", zh: "弄脏车辆", en: "Vehicle soiled", need: { zh: "必须上传照片", en: "Photo required" } },
+  { k: "vehicle_damage", zh: "车辆损坏", en: "Vehicle damaged", need: { zh: "照片 + 维修估价", en: "Photo + repair estimate" } },
+  { k: "not_as_described", zh: "车辆与描述不符", en: "Vehicle not as described" },
+  { k: "lost_item", zh: "物品遗失", en: "Lost item" }, { k: "fare_error", zh: "费用有误", en: "Cost is wrong" },
+  { k: "safety", zh: "安全问题", en: "Safety issue" }, { k: "misconduct", zh: "行为不当", en: "Inappropriate behaviour" }
+];
+function viewHelp() {
+  const ty = HELP_TYPES.find(h => h.k === S.helpType);
+  return `<form class="card" data-form="help"><h2>${L("提交申诉", "Open a claim")}</h2>
+    <label class="f" for="hf-type">${L("问题类型", "What happened")}<select id="hf-type" data-input="helptype"><option value="">${L("请选择", "Choose one")}</option>${HELP_TYPES.map(h => `<option value="${h.k}" ${S.helpType === h.k ? "selected" : ""}>${esc(T(h))}</option>`).join("")}</select></label>
+    ${ty && ty.need ? `<div class="banner warn">${esc(T(ty.need))}</div>` : ""}
+    <label class="f" for="hf-text">${L("描述", "Details")}<textarea id="hf-text" placeholder="${L("发生了什么、在哪一段路", "What happened and when")}"></textarea></label>
+    <label class="f" for="hf-photo">${L("照片", "Photos")}<input id="hf-photo" type="file" accept="image/*" multiple data-input="helpphoto"></label>
+    ${S.helpType === "vehicle_damage" ? `<label class="f" for="hf-est">${L("维修估价（$）", "Repair estimate ($)")}<input id="hf-est" type="number" step="0.01" data-input="helpest" value="${esc(S.helpEstimate)}"></label>` : ""}
+    <p class="err" id="help-err" hidden></p>
+    <button class="btn primary" type="submit">${L("提交", "Submit")}</button></form>
+    <div class="card"><h3>${L("紧急情况", "Emergency")}</h3><p class="small muted" style="margin:0">${L("人身安全有危险时，请直接拨打 911。行程群聊里有 SOS 按钮。", "If anyone is in danger, call 911. The trip chat has an SOS button.")}</p></div>`;
+}
+
+function viewAdmin() {
+  if (S.persona !== "admin") return `<div class="card">${L("只有管理员可以进入。", "Admins only.")} <button class="btn sm primary" data-act="persona" data-p="admin">${L("切到管理员", "Be admin")}</button></div>`;
+  const typeName = k => T(HELP_TYPES.find(h => h.k === k));
+  return `<div class="card"><h2>${L("车主认证审核", "Driver verification")}</h2><div class="list">${S.verifications.map(v => `<div class="row wrap"><div class="grow"><b>${name(v.who)}</b> <span class="pill">${v.tier === "full" ? L("完整级", "Full") : L("邻居级", "Neighbour")}</span><div class="xs muted">${esc(T(v.sub))}</div></div>
+      ${v.status === "pending" ? `<button class="btn sm" data-act="verify" data-v="${v.id}" data-s="rejected">${L("拒绝", "Reject")}</button><button class="btn sm primary" data-act="verify" data-v="${v.id}" data-s="approved">${L("通过", "Approve")}</button>` : `<span class="pill ${v.status === "approved" ? "good" : "bad"}">${v.status === "approved" ? L("已通过", "Approved") : L("已拒绝", "Rejected")}</span>`}</div>`).join("")}</div></div>
+    <div class="card"><h2>${L("申诉", "Claims")}</h2><div class="list">${S.disputes.map(d => `<div class="row wrap"><div class="grow"><b>${esc(typeName(d.type))}</b> <span class="xs muted">· ${name(d.who)}</span><div class="xs muted">${esc(T(d.text))}</div></div>
+      ${d.status === "open" ? `<button class="btn sm" data-act="dispute" data-d="${d.id}" data-s="rejected">${L("驳回", "Dismiss")}</button><button class="btn sm primary" data-act="dispute" data-d="${d.id}" data-s="resolved">${L("裁决", "Resolve")}</button>` : `<span class="pill">${d.status === "resolved" ? L("已裁决", "Resolved") : L("已驳回", "Dismissed")}</span>`}</div>`).join("")}</div>
+      <p class="xs muted" style="margin:0">${L("裁决金额会作为一笔“申诉裁决”加进行程账单。", "Ruling amounts are added to the trip bill as a dispute line.")}</p></div>
+    <div class="card"><h2>${L("账号", "Accounts")}</h2><div class="list">${Object.keys(S.users).map(u => `<div class="row"><span class="grow">${name(u)}</span><span class="pill ${S.users[u] === "suspended" ? "bad" : ""}">${S.users[u] === "suspended" ? L("已暂停", "Suspended") : L("正常", "Active")}</span>
+      <button class="btn sm" data-act="suspend" data-u="${u}">${S.users[u] === "suspended" ? L("恢复", "Restore") : L("暂停", "Suspend")}</button></div>`).join("")}</div></div>`;
+}
+
+/* ---------- shell ---------- */
+function route() {
+  const h = (location.hash || "#discover").slice(1);
+  const [page, arg] = [h.split("-")[0], h.split("-").slice(1).join("-")];
+  return { page, arg };
+}
+const TITLES = {
+  discover: ["发现班次", "Find a trip"], trip: ["班次详情", "Trip"], route: ["路线与油费", "Route & costs"], board: ["上车", "Boarding"],
+  chat: ["行程群聊", "Trip chat"], errands: ["代买", "Errands"], bill: ["账单", "Bill"], rate: ["评分", "Rate"], trips: ["我的行程", "My trips"],
+  drive: ["车主中心", "Driver"], post: ["发班次", "Post a trip"], vehicle: ["车辆档案", "Vehicle"], inbox: ["消息", "Inbox"], me: ["我", "Me"],
+  help: ["帮助与申诉", "Help & claims"], admin: ["管理后台", "Admin"]
+};
+const TOP = ["discover", "trips", "drive", "inbox", "me"];
+function render() {
+  const { page, arg } = route();
+  const views = { discover: viewDiscover, trip: () => viewTrip(arg), route: () => viewRoute(arg), board: () => viewBoard(arg), chat: () => viewChat(arg),
+    errands: () => viewErrands(arg), bill: () => viewBill(arg), rate: () => viewRate(arg), trips: viewTrips, drive: viewDrive, post: viewPost,
+    vehicle: viewVehicle, inbox: viewInbox, me: viewMe, help: viewHelp, admin: viewAdmin };
+  const v = views[page] || viewDiscover; const tt = TITLES[page] || TITLES.discover;
+  const tabOf = { trip: "discover", route: "trips", board: "trips", chat: "trips", errands: "trips", bill: "trips", rate: "trips", post: "drive", vehicle: "drive", help: "me", admin: "me" }[page] || page;
+  const unread = S.notifications.filter(n => n.unread).length;
+  const focusId = document.activeElement && document.activeElement.id; const selStart = document.activeElement && document.activeElement.selectionStart;
+  document.getElementById("app").innerHTML = `
+    <header class="top">${TOP.includes(page) ? "" : `<button class="back" data-act="back" aria-label="${L("返回", "Back")}">‹</button>`}<h1>${L(tt[0], tt[1])}</h1>
+      <select class="persona" id="persona" data-input="persona" aria-label="${L("演示身份", "Demo persona")}">
+        <option value="amy" ${S.persona === "amy" ? "selected" : ""}>${L("乘客 Amy", "Rider Amy")}</option>
+        <option value="lily" ${S.persona === "lily" ? "selected" : ""}>${L("车主 Lily", "Driver Lily")}</option>
+        <option value="admin" ${S.persona === "admin" ? "selected" : ""}>${L("管理员", "Admin")}</option></select>
+      <button class="lang" data-act="lang" data-v="${S.lang === "zh" ? "en" : "zh"}">${S.lang === "zh" ? "EN" : "中"}</button></header>
+    <main>${v()}</main>
+    <nav class="tabs"><div class="inner">${[["discover", I.search, "发现", "Discover"], ["trips", I.trips, "我的行程", "Trips"], ["drive", I.car, "开车", "Drive"], ["inbox", I.bell, "消息", "Inbox"], ["me", I.me, "我", "Me"]]
+      .map(([k, ic, zh, en]) => `<a href="#${k}" class="${tabOf === k ? "on" : ""}">${ic}<span>${L(zh, en)}</span>${k === "inbox" && unread ? `<span class="dot">${unread}</span>` : ""}</a>`).join("")}</div></nav>`;
+  document.getElementById("layer").innerHTML = (S.modal ? modalHtml() : "") + (S.toast ? `<div class="toast" role="status">${esc(S.toast)}</div>` : "");
+  document.documentElement.lang = S.lang === "zh" ? "zh-CN" : "en";
+  if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); try { if (selStart != null) el.setSelectionRange(selStart, selStart); } catch (e) {} } }
+}
+function modalHtml() {
+  if (S.modal === "sos") return `<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true"><h2>${L("确认拨打 911？", "Call 911?")}</h2>
+    <p class="small muted" style="margin:0">${L("只在紧急情况下使用。拨打后会把你的行程信息发给车上其他人。", "Only for emergencies. Your trip details will be shared with others in the car.")}</p>
+    <a class="btn danger" href="tel:911">${L("拨打 911", "Call 911")}</a><p class="xs muted" style="margin:0;text-align:center">${L("如果没有自动拨号，请手动拨打 911。", "If your phone doesn't dial, call 911 directly.")}</p>
+    <button class="btn" data-act="closemodal">${L("取消", "Cancel")}</button></div></div>`;
+  if (S.modal === "share") return `<div class="modal-bg"><div class="modal"><h2>${L("分享行程", "Share trip")}</h2>
+    <input id="share-url" readonly value="https://carpool.example/s/7fK2qLx9"><p class="xs muted" style="margin:0">${L("对方不用登录就能看到目的地、时间和车辆信息，不显示完整车牌和电话。", "Viewers see destination, time and car, without the full plate or phone numbers.")}</p>
+    <button class="btn primary" data-act="copyshare">${L("复制链接", "Copy link")}</button><button class="btn" data-act="closemodal">${L("关闭", "Close")}</button></div></div>`;
+  return "";
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const a = el.dataset.act; const d = el.dataset;
+  if (el.tagName === "INPUT" && el.type === "checkbox") { /* handled below */ }
+  switch (a) {
+    case "back": history.length > 1 ? history.back() : (location.hash = "#discover"); return;
+    case "lang": S.lang = d.v; break;
+    case "persona": S.persona = d.p; S.rating = { stars: 0, tags: {}, clean: 0, cleanTags: {} }; break;
+    case "filter": S.filter[d.k] = d.v; break;
+    case "seats": S.filter.seats = !S.filter.seats; break;
+    case "follow": S.following[d.d] = !S.following[d.d]; toast(S.following[d.d] ? L("已关注，有新班次会通知你", "Following. You'll hear about new trips") : L("已取消关注", "Unfollowed")); return;
+    case "join": S.joined[d.trip] = d.place; S.pickupQuery = ""; toast(L("报名已发送", "Request sent")); return;
+    case "accept": { const b = S.bookings.find(x => x.id === d.b); const t = tripById(b.trip);
+      if (seatsLeft(t).left <= 0) { toast(L("座位已满", "Trip is full")); return; }
+      b.status = "accepted"; b.pin = String(1000 + Math.floor(Math.random() * 9000)); b.boarded = false;
+      const r = S.route[b.trip]; r.splice(r.indexOf("dest"), 0, "pk:" + b.who); r.splice(r.indexOf("dest") + 1, 0, "dr:" + b.who);
+      S.bill.splice(S.bill.filter(l => l.kind === "fuel").length, 0, { id: "l" + Date.now(), kind: "fuel", payer: b.who, payee: "lily", cents: null, status: "unpaid" });
+      toast(L(`已接受 ${name(b.who)}，路线已更新`, `Accepted ${name(b.who)}. Route updated`)); return; }
+    case "reject": S.bookings.find(x => x.id === d.b).status = "rejected"; break;
+    case "move": { const r = S.route.t1; const i = +d.i, j = i + +d.dir; [r[i], r[j]] = [r[j], r[i]]; break; }
+    case "resetkm": S.manualKm = {}; break;
+    case "board": { const b = S.bookings.find(x => x.id === d.b);
+      if ((S.pinInput[b.id] || "") === b.pin) { b.boarded = true; toast(L(`${name(b.who)} 已上车`, `${name(b.who)} is on board`)); } else toast(L("PIN 不对，请再核对一次", "That PIN doesn't match. Check again")); return; }
+    case "phrase": S.messages.push({ who: S.persona, text: PHRASES[+d.i] }); break;
+    case "sos": S.modal = "sos"; break;
+    case "share": S.modal = "share"; break;
+    case "closemodal": S.modal = null; break;
+    case "copyshare": { const v = "https://carpool.example/s/7fK2qLx9";
+      (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(L("已复制", "Copied")), () => { const i = document.getElementById("share-url"); i.select(); toast(L("请长按复制", "Select and copy the link")); }); return; }
+    case "claim": S.errand.claimedBy = S.persona; toast(L("已认领，边买边勾选", "Claimed. Tick items as you shop")); return;
+    case "check": S.errand.items[+d.i].done = el.checked; break;
+    case "paid": S.bill.find(l => l.id === d.l).status = "marked"; toast(L("已通知收款方确认", "Payee asked to confirm")); return;
+    case "confirm": S.bill.find(l => l.id === d.l).status = "confirmed"; toast(L("已确认收款", "Marked as received")); return;
+    case "star": S.rating[d.k] = +d.n; break;
+    case "tag": S.rating.tags[d.i] = !S.rating.tags[d.i]; break;
+    case "ctag": S.rating.cleanTags[d.k] = !S.rating.cleanTags[d.k]; break;
+    case "submitrate": S.rating = { stars: 0, tags: {}, clean: 0, cleanTags: {} }; toast(L("谢谢，评分已提交", "Thanks, rating submitted")); return;
+    case "skip": S.series.s1.skips[d.d] = !S.series.s1.skips[d.d]; break;
+    case "savevehicle": toast(L("车辆档案已保存", "Vehicle saved")); return;
+    case "verify": S.verifications.find(v => v.id === d.v).status = d.s; break;
+    case "dispute": S.disputes.find(x => x.id === d.d).status = d.s; break;
+    case "suspend": S.users[d.u] = S.users[d.u] === "suspended" ? "active" : "suspended"; break;
+    case "reset": { const lang = S.lang; S = freshState(); S.lang = lang; toast(L("演示数据已重置", "Demo data reset")); return; }
+  }
+  render();
+});
+document.addEventListener("input", e => {
+  const el = e.target; const k = el.dataset && el.dataset.input; if (!k) return;
+  if (k === "pickup") { S.pickupQuery = el.value; render(); }
+  else if (k === "km") { const v = parseFloat(el.value); if (!isNaN(v) && v >= 0) { S.manualKm[el.dataset.key] = v; } }
+  else if (k === "pin") S.pinInput[el.dataset.b] = el.value.replace(/\D/g, "").slice(0, 4);
+  else if (k === "receipt") { S.errand.receipt = el.value; render(); }
+  else if (k === "vseats" || k === "vfuel") { S.vehicleForm = S.vehicleForm || { seats: S.drivers.lily.seatsTotal, fuel: S.drivers.lily.fuel };
+    S.vehicleForm[k === "vseats" ? "seats" : "fuel"] = parseFloat(el.value); render(); }
+  else if (k === "helpest") S.helpEstimate = el.value;
+});
+document.addEventListener("change", e => {
+  const el = e.target; const k = el.dataset && el.dataset.input; if (!k) return;
+  if (k === "km") render();
+  else if (k === "persona") { S.persona = el.value; S.rating = { stars: 0, tags: {}, clean: 0, cleanTags: {} }; render(); }
+  else if (k === "helptype") { S.helpType = el.value; render(); }
+  else if (k === "helpphoto") S.helpPhotos = el.files.length;
+});
+document.addEventListener("submit", e => {
+  e.preventDefault(); const f = e.target.dataset.form;
+  if (f === "chat") { const v = e.target.msg.value.trim(); if (v) { S.messages.push({ who: S.persona, text: { zh: v, en: v } }); render(); } }
+  if (f === "post") { const gas = parseFloat(document.getElementById("pf-gas").value); const err = document.getElementById("post-err");
+    if (!(gas >= 0.5 && gas <= 3.5)) { err.textContent = L("油价需在 $0.50–3.50/L 之间", "Gas price must be $0.50–3.50/L"); err.hidden = false; return; }
+    toast(L("已发布，关注你的人会收到通知", "Posted. Your followers have been notified")); location.hash = "#drive"; }
+  if (f === "help") { const err = document.getElementById("help-err"); let msg = "";
+    if (!S.helpType) msg = L("请选择问题类型", "Choose what happened");
+    else if (S.helpType === "soiled_vehicle" && !S.helpPhotos) msg = L("弄脏车辆需要至少 1 张照片", "Add at least one photo of the mess");
+    else if (S.helpType === "vehicle_damage" && (!S.helpPhotos || !(parseFloat(S.helpEstimate) > 0))) msg = L("车辆损坏需要照片和维修估价", "Add a photo and a repair estimate");
+    if (msg) { err.textContent = msg; err.hidden = false; return; }
+    S.helpType = ""; S.helpPhotos = 0; S.helpEstimate = ""; toast(L("已提交，我们会在 24 小时内回复", "Submitted. We'll reply within 24 hours")); }
+});
+window.addEventListener("hashchange", () => { S.modal = null; render(); window.scrollTo(0, 0); });
+render();
+</script>
+
+</body>
+</html>
