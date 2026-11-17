@@ -2,11 +2,14 @@
 
 import { HandHeart, PiggyBank, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { AppMark } from "@/components/AppMark";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { ButtonLink } from "@/components/ui";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n/types";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 const FEATURES: { icon: LucideIcon; title: MessageKey; body: MessageKey }[] = [
   { icon: PiggyBank, title: "welcome.featureSaveTitle", body: "welcome.featureSaveBody" },
@@ -16,6 +19,13 @@ const FEATURES: { icon: LucideIcon; title: MessageKey; body: MessageKey }[] = [
 
 export default function WelcomePage() {
   const t = useT();
+  const { status } = useAuth();
+  const router = useRouter();
+
+  // 已经登录的人直接进入
+  useEffect(() => {
+    if (status === "signedIn") router.replace("/");
+  }, [status, router]);
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pt-[calc(env(safe-area-inset-top)+12px)] pb-[calc(env(safe-area-inset-bottom)+24px)]">
       <div className="flex justify-end">
@@ -44,7 +54,7 @@ export default function WelcomePage() {
       </ul>
 
       <div className="mt-auto flex flex-col gap-3 pt-10">
-        <ButtonLink href="/home" className="w-full">
+        <ButtonLink href="/login" className="w-full">
           {t("welcome.start")}
         </ButtonLink>
         <Link href="/fare" className="py-2 text-center text-sm font-medium text-accent">

@@ -2,13 +2,16 @@
 
 import { useEffect, type ReactNode } from "react";
 import { I18nProvider } from "@/i18n/I18nProvider";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { isNativeApp } from "@/lib/platform";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <I18nProvider>
-      <ServiceWorkerRegistration />
-      {children}
+      <AuthProvider>
+        <ServiceWorkerRegistration />
+        {children}
+      </AuthProvider>
     </I18nProvider>
   );
 }

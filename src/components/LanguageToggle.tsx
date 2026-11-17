@@ -2,10 +2,12 @@
 
 import { Languages } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { usePreferenceSetters } from "@/lib/auth/usePreferenceSetters";
 
 /** 右上角的语言切换：中文界面显示“English”，英文界面显示“中文” */
 export function LanguageToggle() {
-  const { locale, setLocale, t } = useI18n();
+  const { locale, t } = useI18n();
+  const { setLocale } = usePreferenceSetters();
   const next = locale === "zh" ? "en" : "zh";
   return (
     <button

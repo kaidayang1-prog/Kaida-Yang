@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { EmptyState, SectionTitle, Segmented } from "@/components/ui";
 import { useT } from "@/i18n/I18nProvider";
 import type { MessageKey } from "@/i18n/types";
+import { usePreferenceSetters } from "@/lib/auth/usePreferenceSetters";
 import { useRole, type Role } from "@/lib/preferences";
 import { useIsClient } from "@/lib/useIsClient";
 
@@ -16,7 +17,8 @@ function greetingKey(hour: number): MessageKey {
 
 export default function HomePage() {
   const t = useT();
-  const [role, setRole] = useRole();
+  const [role] = useRole();
+  const { setRole } = usePreferenceSetters();
   const isClient = useIsClient();
 
   return (

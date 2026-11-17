@@ -1,6 +1,7 @@
 -- =====================================================================
 -- 权限（RLS）测试：用 `supabase test db` 运行（pgTAP）
 -- 场景：Lily 是车主（Avondale 小区），Amy 是同小区乘客，Dana 住另一个小区，Eve 刚注册，还有一个管理员。
+-- 数据库里可能已有种子数据，所以每条断言都只统计本测试自己建的数据。
 -- =====================================================================
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -35,8 +36,8 @@ insert into auth.users (id, phone) values
   ('44444444-4444-4444-4444-444444444444', '+14165550104'),   -- 管理员
   ('55555555-5555-5555-5555-555555555555', '+14165550105');   -- Eve 刚注册
 
-select is((select count(*)::int from public.profiles), 5, '注册后自动创建公开资料');
-select is((select count(*)::int from public.user_credit where score = 100), 5, '注册后信用分为 100');
+select is((select count(*)::int from public.profiles where id in ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333','44444444-4444-4444-4444-444444444444','55555555-5555-5555-5555-555555555555')), 5, '注册后自动创建公开资料');
+select is((select count(*)::int from public.user_credit where score = 100 and user_id in ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333','44444444-4444-4444-4444-444444444444','55555555-5555-5555-5555-555555555555')), 5, '注册后信用分为 100');
 select ok(
   not exists (select 1 from pg_tables where schemaname = 'public' and not rowsecurity),
   'public 下所有表都开启了 RLS'
@@ -103,12 +104,12 @@ insert into public.booking_pins (booking_id, pin) values ('99999999-0000-0000-00
 -- ---------- Amy：同小区、已被接受的乘客 ----------
 select pg_temp.login_as('22222222-2222-2222-2222-222222222222');
 
-select is((select count(*)::int from public.trips), 2, 'Amy 能看到本小区班次和公开班次');
-select is((select count(*)::int from public.user_private), 1, 'Amy 只能看到自己的隐私资料');
+select is((select count(*)::int from public.trips where id in ('eeeeeeee-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002')), 2, 'Amy 能看到本小区班次和公开班次');
+select is((select count(*)::int from public.user_private), 1, 'Amy 只能看到自己的隐私资料（包括种子数据在内，一共只有 1 行）');
 select is((select count(*)::int from public.community_members), 1, 'Amy 看不到社区成员名单，只看到自己');
 select is((select pin::text from public.booking_pins), '4827', 'Amy 能看到自己的上车 PIN');
 select is((select count(*)::int from public.vehicle_plates), 1, '已被接受的乘客能看到车牌全号（方便认车）');
-select is((select count(*)::int from public.meeting_points), 2, 'Amy 能看到班次用到的自建集合点');
+select is((select count(*)::int from public.meeting_points where id in ('dddddddd-0000-0000-0000-000000000001','dddddddd-0000-0000-0000-000000000002')), 2, 'Amy 能看到班次用到的自建集合点');
 select lives_ok(
   $$ insert into public.trip_messages (trip_id, sender_id, body)
      values ('eeeeeeee-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', '我到集合点了') $$,
@@ -150,17 +151,17 @@ select throws_ok(
 -- ---------- Dana：另一个小区，没有报名 ----------
 select pg_temp.login_as('33333333-3333-3333-3333-333333333333');
 
-select is((select count(*)::int from public.trips), 1, 'Dana 只能看到公开班次，看不到别的小区的社区班次');
-select is((select count(*)::int from public.bookings), 0, 'Dana 看不到别人的报名');
-select is((select count(*)::int from public.vehicles), 1, 'Dana 能通过公开班次看到车辆资料');
-select is((select count(*)::int from public.vehicle_plates), 0, '但看不到车牌全号');
-select is((select count(*)::int from public.meeting_points), 1, 'Dana 只能看到官方集合点，看不到别的小区班次的自建点');
-select is((select count(*)::int from public.trip_messages), 0, 'Dana 看不到别人班次的群聊');
+select is((select count(*)::int from public.trips where id in ('eeeeeeee-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002')), 1, 'Dana 只能看到公开班次，看不到别的小区的社区班次');
+select is((select count(*)::int from public.bookings where id = '99999999-0000-0000-0000-000000000001'), 0, 'Dana 看不到别人的报名');
+select is((select count(*)::int from public.vehicles where id = 'bbbbbbbb-0000-0000-0000-000000000001'), 1, 'Dana 能通过公开班次看到车辆资料');
+select is((select count(*)::int from public.vehicle_plates where vehicle_id = 'bbbbbbbb-0000-0000-0000-000000000001'), 0, '但看不到车牌全号');
+select is((select count(*)::int from public.meeting_points where id in ('dddddddd-0000-0000-0000-000000000001','dddddddd-0000-0000-0000-000000000002')), 1, 'Dana 只能看到官方集合点，看不到别的小区班次的自建点');
+select is((select count(*)::int from public.trip_messages where trip_id in ('eeeeeeee-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002')), 0, 'Dana 看不到别人班次的群聊');
 select throws_ok(
   $$ insert into public.trip_messages (trip_id, sender_id, body)
      values ('eeeeeeee-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'hi') $$,
   '42501', null, 'Dana 不能在别人的班次群聊发消息');
-select is((select count(*)::int from public.community_posts), 0, 'Dana 看不到别的小区的帖子');
+select is((select count(*)::int from public.community_posts where community_id = 'aaaaaaaa-0000-0000-0000-000000000001'), 0, 'Dana 看不到别的小区的帖子');
 select throws_ok(
   $$ insert into public.community_posts (community_id, author_id, kind, title)
      values ('aaaaaaaa-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'swap', '换书') $$,
@@ -174,7 +175,7 @@ select lives_ok(
 -- ---------- Lily：车主 ----------
 select pg_temp.login_as('11111111-1111-1111-1111-111111111111');
 
-select is((select count(*)::int from public.bookings), 1, '车主能看到自己班次的报名');
+select is((select count(*)::int from public.bookings where id = '99999999-0000-0000-0000-000000000001'), 1, '车主能看到自己班次的报名');
 select is((select count(*)::int from public.booking_pins), 0, '车主看不到乘客的 PIN（只能输入后由系统核对）');
 select is((select count(*)::int from public.user_credit where user_id = '22222222-2222-2222-2222-222222222222'), 1,
           '车主能看到报名乘客的信用分');
@@ -187,7 +188,7 @@ select throws_ok($$ select count(*) from public.trips $$, '42501', null, '未登
 
 -- ---------- 管理员 ----------
 select pg_temp.login_as('44444444-4444-4444-4444-444444444444');
-select is((select count(*)::int from public.user_private), 5, '管理员能看到所有用户的隐私资料');
+select is((select count(*)::int from public.user_private where user_id in ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222','33333333-3333-3333-3333-333333333333','44444444-4444-4444-4444-444444444444','55555555-5555-5555-5555-555555555555')), 5, '管理员能看到所有用户的隐私资料');
 
 -- ---------- 系统行为 ----------
 select pg_temp.logout();
@@ -202,7 +203,7 @@ select is((select verification_level::text from public.profiles where id = '5555
 
 update public.profiles set status = 'suspended' where id = '11111111-1111-1111-1111-111111111111';
 select pg_temp.login_as('33333333-3333-3333-3333-333333333333');
-select is((select count(*)::int from public.trips), 0, '车主账号被暂停后，他的班次对其他人隐藏');
+select is((select count(*)::int from public.trips where id in ('eeeeeeee-0000-0000-0000-000000000001','eeeeeeee-0000-0000-0000-000000000002')), 0, '车主账号被暂停后，他的班次对其他人隐藏');
 select pg_temp.logout();
 
 select * from finish();
