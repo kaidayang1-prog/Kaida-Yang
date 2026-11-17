@@ -188,7 +188,7 @@ function FareResultView({
   gas: number;
   joinNames: (ids: string[]) => string;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const people = [DRIVER.id, ...PASSENGERS.map((p) => p.id)].filter((id) => id in result.shares);
   const cell = "px-2 py-2 text-right tabular-nums";
 
@@ -263,7 +263,7 @@ function FareResultView({
 
       <p className="text-sm leading-relaxed text-muted">
         {t("fare.totalLine", { exact: formatExactCents(result.totalExactCents), total: formatCents(result.totalCents) })}
-        {" "}
+        {locale === "zh" ? "" : " "}
         {result.rounding.rest > 0
           ? t("fare.roundingLine", {
               floorSum: formatCents(result.rounding.floorSum),
