@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/*
+ * 设计令牌：温暖、简洁、有社区感。只有一种强调色（暖橙）。
+ * 浅色：白底文字在强调色上对比度 5.2:1；深色：深色文字在强调色上 7.1:1。
+ */
+@theme {
+  --color-bg: #fffaf5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f7f0e8;
+  --color-line: #eadfd3;
+  --color-fg: #1f1712;
+  --color-muted: #6e6259;
+  --color-accent: #c2410c;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #fdebdd;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC",
+    "Microsoft YaHei", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #16110e;
+    --color-surface: #1f1814;
+    --color-surface-2: #2a221c;
+    --color-line: #3a2f27;
+    --color-fg: #f4ede6;
+    --color-muted: #b3a69b;
+    --color-accent: #f08a4b;
+    --color-accent-fg: #1f1712;
+    --color-accent-soft: #3a2418;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    color-scheme: dark;
+  }
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
